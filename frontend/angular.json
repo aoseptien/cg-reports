@@ -20,6 +20,7 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "outputPath": "dist/frontend",
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
@@ -35,6 +36,7 @@
           },
           "configurations": {
             "production": {
+              "baseHref": "/cg-reports/",
               "budgets": [
                 {
                   "type": "initial",

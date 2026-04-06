@@ -233,19 +233,28 @@ TZ=America/New_York
 - [x] API REST Express
 - [x] Angular Dashboard (Dashboard, Schedule, History)
 - [x] Windows Service installer
-- [ ] Setup inicial Google Cloud (pendiente del usuario)
+- [x] GitHub Actions workflow para deploy automático a GitHub Pages
+- [x] baseHref `/cg-reports/` configurado en angular.json (production)
+- [x] SPA routing fix para GitHub Pages (404.html + script en index.html)
+- [x] GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET ya completados en .env
+- [x] SHEETS_DAILY_ID, SHEETS_HOURLY_ID, APPS_SCRIPT_DAILY_ID, APPS_SCRIPT_HOURLY_ID completados en .env
+- [x] Google OAuth2 ya autorizado — tokens guardados en backend/sessions/google_tokens.json
+- [x] node_modules del backend instalados
+- [ ] Login de Puppeteer en GHL y 3CX (correr `npm run setup-session` desde backend/)
+- [ ] Activar GitHub Pages en Settings → Pages → Source: GitHub Actions
+- [ ] Push del código a GitHub (activa el deploy automático)
 - [ ] Prueba end-to-end en PC real
-- [ ] Deploy Angular a GitHub Pages
 
 ---
 
 ## 📌 Pendientes / Notas
 
-1. **El usuario necesita crear credenciales en Google Cloud Console** (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
-2. **Publicar Apps Script como API Executable** para que el trigger funcione
-3. **Primer login:** correr `npm run setup-session` una vez por PC para guardar la sesión de Google
-4. **GitHub Pages:** configurar en repo settings → Pages → branch `gh-pages`
-5. **Timezone:** verificar que `TZ=America/New_York` es correcto para la ubicación del usuario
+1. **Próximo paso inmediato:** correr `npm run setup-session` en `backend/` — se abre Chrome con ventana, hacer login en GHL y 3CX con Google SSO, luego Enter en la terminal
+2. **Publicar Apps Script como API Executable** para que el trigger funcione (ver SETUP.md PASO 8)
+3. **GitHub Pages:** activar en repo Settings → Pages → Source: **"GitHub Actions"** (no branch)
+4. **Push del código:** `git add . && git commit -m "Ready for production" && git push` — esto activa el deploy automático del frontend
+5. **El .env correcto está en `backend/.env`** — el servidor lo lee desde ahí (no desde backend/src/)
+6. **Timezone:** `TZ=America/New_York` — verificar si es correcto para la ubicación
 
 ---
 
