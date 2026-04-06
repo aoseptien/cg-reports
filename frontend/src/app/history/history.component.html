@@ -1,0 +1,205 @@
+<div class="history">
+  <!-- Page header -->
+  <div class="page-header">
+    <div>
+      <h1>📋 History</h1>
+      <p class="text-muted">All past report executions</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" (click)="loadHistory()" [disabled]="loading()">
+      <span [class.spinning]="loading()">🔄</span>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Summary stats -->
+  @if (!loading() && history().length > 0) {
+    <div class="stats-row">
+      <div class="stat-chip">
+        <span class="stat-icon">📊</span>
+        <span class="stat-val">{{ dailyCount() }}</span>
+        <span class="stat-lbl">Daily</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-icon">⏰</span>
+        <span class="stat-val">{{ hourlyCount() }}</span>
+        <span class="stat-lbl">Hourly</span>
+      </div>
+      <div class="stat-chip success">
+        <span class="stat-icon">✅</span>
+        <span class="stat-val">{{ successCount() }}</span>
+        <span class="stat-lbl">Successful</span>
+      </div>
+      @if (errorCount() > 0) {
+        <div class="stat-chip error">
+          <span class="stat-icon">❌</span>
+          <span class="stat-val">{{ errorCount() }}</span>
+          <span class="stat-lbl">Failed</span>
+        </div>
+      }
+      @if (runningCount() > 0) {
+        <div class="stat-chip running">
+          <span class="stat-icon">🔄</span>
+          <span class="stat-val">{{ runningCount() }}</span>
+          <span class="stat-lbl">Running</span>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Filter tabs -->
+  <div class="filter-tabs">
+    <button
+      [class]="'tab ' + (filter() === 'all' ? 'active' : '')"
+      (click)="setFilter('all')"
+    >
+      All Runs
+      <span class="tab-count">{{ history().length }}</span>
+    </button>
+    <button
+      [class]="'tab ' + (filter() === 'daily' ? 'active' : '')"
+      (click)="setFilter('daily')"
+    >
+      📊 Daily
+      <span class="tab-count">{{ dailyCount() }}</span>
+    </button>
+    <button
+      [class]="'tab ' + (filter() === 'hourly' ? 'active' : '')"
+      (click)="setFilter('hourly')"
+    >
+      ⏰ Hourly
+      <span class="tab-count">{{ hourlyCount() }}</span>
+    </button>
+  </div>
+
+  <!-- Error state -->
+  @if (error()) {
+    <div class="alert alert-error">
+      ❌ {{ error() }}
+    </div>
+  }
+
+  <!-- Loading state -->
+  @if (loading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span class="text-muted">Loading history...</span>
+    </div>
+  }
+
+  <!-- Empty state -->
+  @if (!loading() && filtered().length === 0 && !error()) {
+    <div class="empty-state">
+      <div class="empty-icon">📭</div>
+      <h3>No history yet</h3>
+      <p>Run a daily or hourly report to see results here.</p>
+    </div>
+  }
+
+  <!-- History list -->
+  @if (!loading() && filtered().length > 0) {
+    <div class="history-list">
+      @for (entry of filtered(); track entry.id) {
+        <div
+          class="history-item"
+          [class.has-error]="entry.status === 'error'"
+          [class.is-running]="entry.status === 'running'"
+          [class.expanded]="isExpanded(entry.id)"
+        >
+          <!-- Main row -->
+          <div class="item-main" (click)="toggleExpand(entry.id)">
+            <div class="item-type">
+              <span class="type-icon">{{ typeIcon(entry.type) }}</span>
+              <div>
+                <span class="type-label">{{ typeLabel(entry.type) }} Report</span>
+                <span class="item-date text-muted">{{ entry.startedAt | date:'MMM d, y · h:mm a' }}</span>
+              </div>
+            </div>
+
+            <div class="item-meta">
+              <!-- Files generated -->
+              @if (entry.filesGenerated !== null) {
+                <div class="meta-chip">
+                  <span>📁</span>
+                  <span>{{ entry.filesGenerated }} file{{ entry.filesGenerated === 1 ? '' : 's' }}</span>
+                </div>
+              }
+
+              <!-- Coordinator count -->
+              @if (entry.coordinatorCount !== null) {
+                <div class="meta-chip">
+                  <span>👥</span>
+                  <span>{{ entry.coordinatorCount }} coord{{ entry.coordinatorCount === 1 ? '' : 's' }}</span>
+                </div>
+              }
+
+              <!-- Duration -->
+              @if (entry.status !== 'running') {
+                <div class="meta-chip">
+                  <span>⏱️</span>
+                  <span>{{ formatDuration(entry.duration) }}</span>
+                </div>
+              }
+            </div>
+
+            <div class="item-right">
+              <span [class]="statusBadgeClass(entry.status)">
+                @if (entry.status === 'running') {
+                  <span class="spinner-xs"></span>
+                }
+                {{ entry.status === 'running' ? 'Running' : entry.status === 'success' ? 'Success' : 'Error' }}
+              </span>
+              <span class="expand-chevron" [class.open]="isExpanded(entry.id)">›</span>
+            </div>
+          </div>
+
+          <!-- Expanded details -->
+          @if (isExpanded(entry.id)) {
+            <div class="item-details">
+              <div class="details-grid">
+                <div class="detail">
+                  <span class="detail-label">Started</span>
+                  <span class="detail-value">{{ entry.startedAt | date:'EEEE, MMMM d, y · h:mm:ss a' }}</span>
+                </div>
+                @if (entry.completedAt) {
+                  <div class="detail">
+                    <span class="detail-label">Completed</span>
+                    <span class="detail-value">{{ entry.completedAt | date:'EEEE, MMMM d, y · h:mm:ss a' }}</span>
+                  </div>
+                }
+                @if (entry.duration !== null) {
+                  <div class="detail">
+                    <span class="detail-label">Duration</span>
+                    <span class="detail-value">{{ formatDuration(entry.duration) }}</span>
+                  </div>
+                }
+                @if (entry.filesGenerated !== null) {
+                  <div class="detail">
+                    <span class="detail-label">Files Generated</span>
+                    <span class="detail-value">{{ entry.filesGenerated }}</span>
+                  </div>
+                }
+                @if (entry.coordinatorCount !== null) {
+                  <div class="detail">
+                    <span class="detail-label">Coordinators</span>
+                    <span class="detail-value">{{ entry.coordinatorCount }}</span>
+                  </div>
+                }
+                <div class="detail">
+                  <span class="detail-label">Job ID</span>
+                  <span class="detail-value monospace text-muted">{{ entry.id }}</span>
+                </div>
+              </div>
+
+              @if (entry.error) {
+                <div class="error-block">
+                  <div class="error-header">❌ Error Details</div>
+                  <pre class="error-text">{{ entry.error }}</pre>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

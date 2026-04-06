@@ -1,0 +1,195 @@
+<div class="dashboard">
+  <!-- Page header -->
+  <div class="page-header">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="text-muted">Monitor and control CG report automation</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" (click)="refresh()" [disabled]="loading()">
+      <span [class.spinning]="loading()">🔄</span>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Alert message -->
+  @if (lastMessage(); as msg) {
+    <div [class]="'alert ' + (msg.type === 'success' ? 'alert-success' : 'alert-error')">
+      {{ msg.type === 'success' ? '✅' : '❌' }} {{ msg.text }}
+    </div>
+  }
+
+  <!-- Running banner -->
+  @if (isRunning()) {
+    <div class="running-banner">
+      <div class="spinner"></div>
+      <span>A report is currently running in the background...</span>
+      <span class="badge badge-running">Running</span>
+    </div>
+  }
+
+  <!-- Status cards -->
+  <div class="status-grid">
+    <div class="card status-card">
+      <div class="status-card-inner">
+        <div class="status-icon-wrap" [ngClass]="isOnline() ? 'online' : 'offline'">
+          <span>🌐</span>
+        </div>
+        <div>
+          <div class="status-card-label">Backend Service</div>
+          <div class="status-card-value" [ngClass]="isOnline() ? 'text-success' : 'text-error'">
+            {{ isOnline() ? 'Online' : 'Offline' }}
+          </div>
+        </div>
+        <div class="ms-auto">
+          <span [class]="'pulse-dot ' + (isOnline() ? '' : 'offline')"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card status-card">
+      <div class="status-card-inner">
+        <div class="status-icon-wrap" [ngClass]="hasAuth() ? 'online' : 'offline'">
+          <span>🔐</span>
+        </div>
+        <div>
+          <div class="status-card-label">Google Auth</div>
+          <div class="status-card-value" [ngClass]="hasAuth() ? 'text-success' : 'text-error'">
+            {{ hasAuth() ? 'Authorized' : 'Not Authorized' }}
+          </div>
+        </div>
+        <div class="ms-auto">
+          @if (hasAuth()) {
+            <span class="badge badge-success">✅ OK</span>
+          } @else {
+            <span class="badge badge-error">❌ Failed</span>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="card status-card">
+      <div class="status-card-inner">
+        <div class="status-icon-wrap" [ngClass]="status()?.scheduler ? 'online' : 'offline'">
+          <span>⏰</span>
+        </div>
+        <div>
+          <div class="status-card-label">Scheduler</div>
+          <div class="status-card-value" [ngClass]="status()?.scheduler ? 'text-success' : 'text-muted'">
+            {{ status()?.scheduler ? 'Enabled' : 'Disabled' }}
+          </div>
+        </div>
+        <div class="ms-auto">
+          @if (status()?.scheduler) {
+            <span class="badge badge-success">Active</span>
+          } @else {
+            <span class="badge badge-neutral">Paused</span>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run action cards -->
+  <div class="action-grid">
+    <!-- Daily Report Card -->
+    <div class="card action-card">
+      <div class="action-header">
+        <div class="action-icon daily">📊</div>
+        <div class="action-info">
+          <h3>Daily Report</h3>
+          <p>Generates full daily coordinator summary</p>
+        </div>
+      </div>
+
+      <div class="action-meta">
+        <div class="meta-row">
+          <span class="meta-label">Last run</span>
+          <span class="meta-value">{{ formatDate(status()?.lastDaily ?? null) }}</span>
+        </div>
+        @if (status()?.lastDaily) {
+          <div class="meta-row">
+            <span class="meta-label">Date/time</span>
+            <span class="meta-value text-muted">{{ status()?.lastDaily | date:'MMM d, h:mm a' }}</span>
+          </div>
+        }
+      </div>
+
+      <button
+        class="btn btn-primary btn-run"
+        (click)="runDaily()"
+        [disabled]="runningDaily() || isRunning() || !isOnline()"
+      >
+        @if (runningDaily()) {
+          <span class="spinner"></span>
+          <span>Starting...</span>
+        } @else {
+          <span>▶ Run Daily Report</span>
+        }
+      </button>
+    </div>
+
+    <!-- Hourly Report Card -->
+    <div class="card action-card">
+      <div class="action-header">
+        <div class="action-icon hourly">⏰</div>
+        <div class="action-info">
+          <h3>Hourly Report</h3>
+          <p>Generates hourly updates for active coordinators</p>
+        </div>
+      </div>
+
+      <div class="action-meta">
+        <div class="meta-row">
+          <span class="meta-label">Last run</span>
+          <span class="meta-value">{{ formatDate(status()?.lastHourly ?? null) }}</span>
+        </div>
+        @if (status()?.lastHourly) {
+          <div class="meta-row">
+            <span class="meta-label">Date/time</span>
+            <span class="meta-value text-muted">{{ status()?.lastHourly | date:'MMM d, h:mm a' }}</span>
+          </div>
+        }
+      </div>
+
+      <button
+        class="btn btn-success btn-run"
+        (click)="runHourly()"
+        [disabled]="runningHourly() || isRunning() || !isOnline()"
+      >
+        @if (runningHourly()) {
+          <span class="spinner"></span>
+          <span>Starting...</span>
+        } @else {
+          <span>▶ Run Hourly Report</span>
+        }
+      </button>
+    </div>
+  </div>
+
+  <!-- Quick info footer -->
+  <div class="card info-card">
+    <div class="info-grid">
+      <div class="info-item">
+        <span class="info-icon">📅</span>
+        <div>
+          <div class="info-label">Schedule</div>
+          <div class="info-value">Mon–Fri, 9 AM daily + 1–5 PM hourly</div>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="info-icon">🔄</span>
+        <div>
+          <div class="info-label">Auto-refresh</div>
+          <div class="info-value">Status updates every 10 seconds</div>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="info-icon">📋</span>
+        <div>
+          <div class="info-label">History</div>
+          <div class="info-value">View all past runs in the History tab</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

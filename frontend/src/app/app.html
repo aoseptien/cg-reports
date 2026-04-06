@@ -1,0 +1,61 @@
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">📊</span>
+        <div class="logo-text">
+          <span class="logo-name">CG Reports</span>
+          <span class="logo-sub">Automation</span>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      @for (link of navLinks; track link.path) {
+        <a
+          [routerLink]="link.path"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: link.exact }"
+          class="nav-link"
+        >
+          <span class="nav-icon">{{ link.icon }}</span>
+          <span class="nav-label">{{ link.label }}</span>
+        </a>
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="status-indicators">
+        @if (status(); as s) {
+          <div class="status-row">
+            <span [class]="'pulse-dot ' + (s.online ? '' : 'offline')"></span>
+            <span class="status-label">{{ s.online ? 'Backend Online' : 'Backend Offline' }}</span>
+          </div>
+          <div class="status-row">
+            <span [class]="'status-dot ' + (s.googleAuth ? 'auth-ok' : 'auth-fail')">
+              {{ s.googleAuth ? '✅' : '❌' }}
+            </span>
+            <span class="status-label">Google Auth</span>
+          </div>
+          @if (s.running) {
+            <div class="status-row running-row">
+              <span class="spinner-sm"></span>
+              <span class="status-label running-label">Report Running...</span>
+            </div>
+          }
+        } @else {
+          <div class="status-row">
+            <span class="pulse-dot offline"></span>
+            <span class="status-label">Connecting...</span>
+          </div>
+        }
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main-content">
+    <router-outlet />
+  </main>
+</div>

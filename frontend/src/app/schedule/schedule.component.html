@@ -1,0 +1,222 @@
+<div class="schedule">
+  <!-- Page header -->
+  <div class="page-header">
+    <div>
+      <h1>📅 Schedule</h1>
+      <p class="text-muted">Configure when reports run automatically</p>
+    </div>
+    <button
+      class="btn btn-primary"
+      (click)="save()"
+      [disabled]="saving() || loading()"
+    >
+      @if (saving()) {
+        <span class="spinner"></span>
+        Saving...
+      } @else {
+        💾 Save Changes
+      }
+    </button>
+  </div>
+
+  <!-- Alert -->
+  @if (message(); as msg) {
+    <div [class]="'alert ' + (msg.type === 'success' ? 'alert-success' : 'alert-error')">
+      {{ msg.type === 'success' ? '✅' : '❌' }} {{ msg.text }}
+    </div>
+  }
+
+  @if (loading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span class="text-muted">Loading configuration...</span>
+    </div>
+  } @else {
+    <div class="schedule-grid">
+
+      <!-- Left column -->
+      <div class="col-left">
+
+        <!-- Enable/Disable -->
+        <div class="card config-card">
+          <div class="card-heading">
+            <h3>⚙️ Scheduler Status</h3>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">{{ enabled() ? 'Scheduler Enabled' : 'Scheduler Disabled' }}</div>
+              <div class="toggle-desc">
+                {{ enabled()
+                  ? 'Reports will run automatically on schedule.'
+                  : 'No reports will run automatically. Manual runs still work.' }}
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" [checked]="enabled()" (change)="toggleEnabled()" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Work Days -->
+        <div class="card config-card">
+          <div class="card-heading">
+            <h3>📆 Work Days</h3>
+            <span class="text-muted text-sm">Select which days reports are allowed to run</span>
+          </div>
+          <div class="days-grid">
+            @for (day of dayOptions; track day.value) {
+              <button
+                type="button"
+                [class]="'day-btn ' + (isDaySelected(day.value) ? 'selected' : '')"
+                (click)="toggleDay(day.value)"
+              >
+                <span class="day-short">{{ day.shortLabel }}</span>
+                <span class="day-full">{{ day.label }}</span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Holidays -->
+        <div class="card config-card">
+          <div class="card-heading">
+            <h3>🏖️ Holidays</h3>
+            <span class="text-muted text-sm">Reports skip these dates</span>
+          </div>
+
+          <div class="holiday-add">
+            <input
+              type="date"
+              class="input"
+              [value]="newHoliday()"
+              (input)="setNewHoliday($any($event.target).value)"
+              (keydown.enter)="addHoliday()"
+            />
+            <button class="btn btn-primary btn-sm" (click)="addHoliday()">
+              ＋ Add
+            </button>
+          </div>
+
+          @if (sortedHolidays().length === 0) {
+            <div class="empty-holidays">
+              <span>📭</span>
+              <span class="text-muted text-sm">No holidays configured</span>
+            </div>
+          } @else {
+            <div class="holiday-list">
+              @for (date of sortedHolidays(); track date) {
+                <div class="holiday-item">
+                  <span class="holiday-icon">🗓️</span>
+                  <span class="holiday-date">{{ formatHolidayDate(date) }}</span>
+                  <span class="holiday-raw text-muted text-xs">{{ date }}</span>
+                  <button
+                    class="btn btn-ghost btn-sm holiday-remove"
+                    (click)="removeHoliday(date)"
+                    title="Remove holiday"
+                  >
+                    ✕
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+      </div>
+
+      <!-- Right column -->
+      <div class="col-right">
+
+        <!-- Daily Hour -->
+        <div class="card config-card">
+          <div class="card-heading">
+            <h3>☀️ Daily Report Time</h3>
+            <span class="text-muted text-sm">What time the daily report runs each morning</span>
+          </div>
+          <div class="daily-hour-picker">
+            <select
+              class="input hour-select"
+              [value]="dailyHour()"
+              (change)="setDailyHour($any($event.target).value)"
+            >
+              @for (hour of hourOptions; track hour.value) {
+                <option [value]="hour.value">{{ hour.label }}</option>
+              }
+            </select>
+            <div class="hour-preview">
+              <span class="hour-preview-icon">⏰</span>
+              <span>Daily report will run at <strong>{{ formatHour(dailyHour()) }}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hourly Hours -->
+        <div class="card config-card">
+          <div class="card-heading">
+            <h3>🔄 Hourly Report Times</h3>
+            <span class="text-muted text-sm">Select which hours the hourly report runs</span>
+          </div>
+
+          <div class="hours-grid">
+            @for (hour of allHours; track hour.value) {
+              <button
+                type="button"
+                [class]="'hour-btn ' + (isHourSelected(hour.value) ? 'selected' : '')"
+                (click)="toggleHourlyHour(hour.value)"
+              >
+                {{ hour.label }}
+              </button>
+            }
+          </div>
+
+          @if (sortedHourlyHours().length > 0) {
+            <div class="selected-hours">
+              <span class="text-muted text-xs">Selected:</span>
+              @for (h of sortedHourlyHours(); track h) {
+                <span class="hour-tag">{{ formatHour(h) }}</span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Next scheduled runs -->
+        <div class="card config-card next-runs-card">
+          <div class="card-heading">
+            <h3>🔮 Next Scheduled Runs</h3>
+          </div>
+          <div class="next-runs">
+            <div class="next-run-item">
+              <span class="next-run-icon daily">📊</span>
+              <div>
+                <div class="next-run-label">Daily Report</div>
+                @if (nextDailyRun()) {
+                  <div class="next-run-time">{{ nextDailyRun() | date:'EEE, MMM d @ h:mm a' }}</div>
+                } @else {
+                  <div class="next-run-time text-muted">Not scheduled</div>
+                }
+              </div>
+            </div>
+            <div class="next-run-item">
+              <span class="next-run-icon hourly">⏰</span>
+              <div>
+                <div class="next-run-label">Hourly Report</div>
+                @if (nextHourlyRun()) {
+                  <div class="next-run-time">{{ nextHourlyRun() | date:'EEE, MMM d @ h:mm a' }}</div>
+                } @else {
+                  <div class="next-run-time text-muted">Not scheduled</div>
+                }
+              </div>
+            </div>
+          </div>
+          @if (!enabled()) {
+            <div class="disabled-note">
+              ⚠️ Scheduler is disabled — enable it above to activate scheduled runs.
+            </div>
+          }
+        </div>
+
+      </div>
+    </div>
+  }
+</div>

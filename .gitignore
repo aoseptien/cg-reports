@@ -1,0 +1,36 @@
+# ============================================================
+# CG Reports — .gitignore
+# ============================================================
+
+# ── Variables de entorno (NUNCA subir al repo) ──────────────
+backend/.env
+backend/sessions/
+backend/data/
+backend/logs/
+backend/output/
+
+# ── Node.js ─────────────────────────────────────────────────
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-error.log
+
+# ── Angular build output ─────────────────────────────────────
+frontend/dist/
+frontend/.angular/
+
+# ── Archivos del sistema ─────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDEs ─────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.user
+
+# ── CSVs generados (temporales) ──────────────────────────────
+*.csv
+!backend/.env.example

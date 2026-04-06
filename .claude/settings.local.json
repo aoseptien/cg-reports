@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx @angular/cli@latest new frontend --routing=true --style=scss --skip-git --skip-install)",
+      "Bash(npm install:*)",
+      "Bash(grep -r provideBrowserGlobalErrorListeners '/d/Work/Reports/Web Reports/frontend/node_modules/@angular/core/' --include=*.d.ts -l)",
+      "Bash(grep -r withFetch '/d/Work/Reports/Web Reports/frontend/node_modules/@angular/common/' --include=*.d.ts -l)"
+    ]
+  }
+}
