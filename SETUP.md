@@ -236,7 +236,7 @@ Para verificar que está corriendo:
 El dashboard Angular está en GitHub Pages y es accesible desde cualquier PC.
 
 1. Abre tu browser
-2. Ve a: `https://TU-USUARIO.github.io/cg-reports`
+2. Ve a: `https://aoseptien.github.io/cg-reports`
 
 Desde ahí puedes:
 - 📊 Ver el estado del sistema

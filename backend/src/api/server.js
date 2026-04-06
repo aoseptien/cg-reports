@@ -23,7 +23,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: [
     'http://localhost:4200',         // Angular dev
-    'https://tu-usuario.github.io',  // GitHub Pages (reemplazar)
+    'https://aoseptien.github.io',    // GitHub Pages
   ],
   credentials: true,
 }));
