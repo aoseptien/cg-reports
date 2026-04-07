@@ -39,6 +39,12 @@ export interface RunResult {
   jobId?: string;
 }
 
+export interface CoordinatorsData {
+  coordinators: string[];
+  absentAllDay: string[];   // faltó todo el día → excluida de hourly Y daily
+  leftEarly: string[];      // se fue a mitad → excluida de hourly, aparece en daily
+}
+
 const API = 'http://localhost:3000/api';
 
 @Injectable({ providedIn: 'root' })
@@ -49,8 +55,8 @@ export class ReportsService {
     return this.http.get<AppStatus>(`${API}/status`);
   }
 
-  runDaily(): Observable<RunResult> {
-    return this.http.post<RunResult>(`${API}/run/daily`, {});
+  runDaily(date?: string): Observable<RunResult> {
+    return this.http.post<RunResult>(`${API}/run/daily`, { date: date || '' });
   }
 
   runHourly(): Observable<RunResult> {
@@ -67,5 +73,33 @@ export class ReportsService {
 
   updateScheduler(config: Partial<SchedulerConfig>): Observable<SchedulerConfig> {
     return this.http.put<SchedulerConfig>(`${API}/scheduler`, config);
+  }
+
+  getLogs(n = 80): Observable<{ ts: string; level: string; message: string }[]> {
+    return this.http.get<{ ts: string; level: string; message: string }[]>(`${API}/logs?n=${n}`);
+  }
+
+  clearLogs(): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(`${API}/logs`);
+  }
+
+  stopReport(): Observable<{ success: boolean; stopped: string[] }> {
+    return this.http.post<{ success: boolean; stopped: string[] }>(`${API}/run/stop`, {});
+  }
+
+  getCoordinators(): Observable<CoordinatorsData> {
+    return this.http.get<CoordinatorsData>(`${API}/coordinators`);
+  }
+
+  saveAttendance(absentAllDay: string[], leftEarly: string[]): Observable<{ success: boolean }> {
+    return this.http.put<{ success: boolean }>(`${API}/coordinators/attendance`, { absentAllDay, leftEarly });
+  }
+
+  deleteHistoryEntries(ids: string[]): Observable<{ success: boolean }> {
+    return this.http.post<{ success: boolean }>(`${API}/history/delete`, { ids });
+  }
+
+  deleteAllHistory(): Observable<{ success: boolean }> {
+    return this.http.post<{ success: boolean }>(`${API}/history/delete`, {});
   }
 }

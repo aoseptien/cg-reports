@@ -79,14 +79,14 @@ function isTodayWorkDay(config) {
 
   // Verificar día de semana
   if (!config.workDays[dayOfWeek]) {
-    logger.info(`Hoy (${getDayName(dayOfWeek)}) no es día laborable. Saltando ejecución.`);
+    logger.info(`Today (${getDayName(dayOfWeek)}) is not a work day. Skipping.`);
     return false;
   }
 
   // Verificar feriados
   const todayStr = formatDate(today);
   if (config.holidays && config.holidays.includes(todayStr)) {
-    logger.info(`Hoy (${todayStr}) es feriado. Saltando ejecución.`);
+    logger.info(`Today (${todayStr}) is a holiday. Skipping.`);
     return false;
   }
 
@@ -101,7 +101,7 @@ function startScheduler() {
   const config = loadConfig();
 
   if (!config.enabled) {
-    logger.info('Scheduler deshabilitado por configuración.');
+    logger.info('Scheduler disabled by configuration.');
     return;
   }
 
@@ -115,11 +115,11 @@ function startScheduler() {
       if (!cfg.enabled || !cfg.daily.enabled) return;
       if (!isTodayWorkDay(cfg)) return;
 
-      logger.info('⏰ Cron: iniciando Daily Report...');
+      logger.info('⏰ Cron: starting Daily Report...');
       try {
         await runDailyReport();
       } catch (err) {
-        logger.error(`Cron Daily falló: ${err.message}`);
+        logger.error(`Cron Daily failed: ${err.message}`);
       }
     }, { timezone: 'America/New_York' }); // Ajustar timezone según necesidad
   }
@@ -128,7 +128,7 @@ function startScheduler() {
   if (config.hourly.enabled && config.hourly.hours.length > 0) {
     const hoursList = config.hourly.hours.join(',');
     const hourlyCron = `0 ${hoursList} * * *`;
-    logger.info(`Scheduler Hourly: "${hourlyCron}" → horas: ${config.hourly.hours.map(h => `${h > 12 ? h - 12 : h}pm`).join(', ')}`);
+    logger.info(`Scheduler Hourly: "${hourlyCron}" → hours: ${config.hourly.hours.map(h => `${h > 12 ? h - 12 : h}pm`).join(', ')}`);
 
     hourlyJob = cron.schedule(hourlyCron, async () => {
       const cfg = loadConfig();
@@ -138,16 +138,16 @@ function startScheduler() {
       const currentHour = new Date().getHours();
       if (!cfg.hourly.hours.includes(currentHour)) return;
 
-      logger.info(`⏰ Cron: iniciando Hourly Report (${currentHour}:00)...`);
+      logger.info(`⏰ Cron: starting Hourly Report (${currentHour}:00)...`);
       try {
         await runHourlyReport();
       } catch (err) {
-        logger.error(`Cron Hourly (${currentHour}h) falló: ${err.message}`);
+        logger.error(`Cron Hourly (${currentHour}h) failed: ${err.message}`);
       }
     }, { timezone: 'America/New_York' });
   }
 
-  logger.info('✅ Scheduler iniciado correctamente.');
+  logger.info('✅ Scheduler started successfully.');
 }
 
 /**
@@ -162,7 +162,7 @@ function stopScheduler() {
  * Reinicia el scheduler (útil después de cambios de configuración)
  */
 function restartScheduler() {
-  logger.info('Reiniciando scheduler...');
+  logger.info('Restarting scheduler...');
   startScheduler();
 }
 

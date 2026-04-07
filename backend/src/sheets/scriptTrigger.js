@@ -1,67 +1,51 @@
 /**
- * Trigger de Google Apps Script
- * Llama a fillFromDailySource() / fillFromHourlySource() vía Google Sheets API
- * usando spreadsheets.values.update como "ping" para activar onEdit,
- * o directamente via Apps Script API si está publicado como Web App.
+ * Trigger de Google Apps Script via Web App URL
+ * Llama a fillFromDailySource() / fillFromHourlySource()
+ * haciendo un GET a la URL del Web App publicado en Apps Script.
  */
 
-const { google } = require('googleapis');
-const { getAuthClient } = require('../drive/googleAuth');
+const https = require('https');
 const logger = require('../utils/logger');
 
 /**
- * Dispara la función del Sheet usando Sheets API
- * Escribe un valor trigger en una celda oculta para activar onEdit,
- * luego llama la función directamente via Apps Script API.
- *
+ * Dispara la función del Sheet via Web App URL
  * @param {'daily'|'hourly'} type
- * @param {string} spreadsheetId
- * @param {string} scriptId - ID del Apps Script (de la URL del editor)
  */
-async function triggerSheetScript(type, spreadsheetId, scriptId) {
-  try {
-    const auth = await getAuthClient();
-
-    // Intentar via Apps Script API (método preferido)
-    if (scriptId) {
-      await triggerViaScriptApi(auth, scriptId, type);
-    } else {
-      logger.warn('APPS_SCRIPT_ID no configurado. El Sheet deberá recargarse manualmente.');
-    }
-
-  } catch (err) {
-    logger.error(`Error al disparar script ${type}: ${err.message}`);
-    // No lanzar error - la subida ya fue exitosa, el script puede correr manualmente
-  }
-}
-
-/**
- * Llama la función via Google Apps Script API
- */
-async function triggerViaScriptApi(auth, scriptId, type) {
-  const script = google.script({ version: 'v1', auth });
+async function triggerSheetScript(type) {
+  const url = type === 'daily'
+    ? process.env.APPS_SCRIPT_DAILY_URL
+    : process.env.APPS_SCRIPT_HOURLY_URL;
 
   const functionName = type === 'daily'
     ? 'fillFromDailySource'
     : 'fillFromHourlySource';
 
-  logger.info(`Ejecutando ${functionName} via Apps Script API...`);
-
-  const response = await script.scripts.run({
-    scriptId,
-    requestBody: {
-      function: functionName,
-      devMode: false,
-    },
-  });
-
-  if (response.data.error) {
-    const err = response.data.error;
-    throw new Error(`Apps Script error: ${JSON.stringify(err)}`);
+  if (!url) {
+    logger.warn(`APPS_SCRIPT_${type.toUpperCase()}_URL no configurada. El Sheet deberá actualizarse manualmente.`);
+    return;
   }
 
+  logger.info(`Ejecutando ${functionName} via Web App...`);
+
+  await httpGet(`${url}?fn=${functionName}`);
+
   logger.info(`✅ ${functionName} ejecutado correctamente.`);
-  return response.data;
+}
+
+function httpGet(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 400) {
+          resolve(data);
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+        }
+      });
+    }).on('error', reject);
+  });
 }
 
 module.exports = { triggerSheetScript };

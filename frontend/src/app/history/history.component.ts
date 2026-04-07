@@ -25,6 +25,8 @@ export class HistoryComponent implements OnInit {
   error = signal<string | null>(null);
   filter = signal<FilterType>('all');
   expandedId = signal<string | null>(null);
+  selectedIds = signal<Set<string>>(new Set());
+  deleting = signal(false);
 
   readonly filtered = computed(() => {
     const f = this.filter();
@@ -38,6 +40,13 @@ export class HistoryComponent implements OnInit {
   readonly successCount = computed(() => this.history().filter(e => e.status === 'success').length);
   readonly errorCount = computed(() => this.history().filter(e => e.status === 'error').length);
   readonly runningCount = computed(() => this.history().filter(e => e.status === 'running').length);
+  readonly selectedCount = computed(() => this.selectedIds().size);
+
+  readonly allFilteredSelected = computed(() => {
+    const ids = this.selectedIds();
+    const list = this.filtered();
+    return list.length > 0 && list.every(e => ids.has(e.id));
+  });
 
   ngOnInit(): void {
     this.loadHistory();
@@ -46,9 +55,9 @@ export class HistoryComponent implements OnInit {
   loadHistory(): void {
     this.loading.set(true);
     this.error.set(null);
+    this.selectedIds.set(new Set());
     this.reportsService.getHistory().subscribe({
       next: data => {
-        // Sort newest first
         const sorted = [...data].sort((a, b) =>
           new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
         );
@@ -64,6 +73,7 @@ export class HistoryComponent implements OnInit {
 
   setFilter(f: FilterType): void {
     this.filter.set(f);
+    this.selectedIds.set(new Set());
   }
 
   toggleExpand(id: string): void {
@@ -72,6 +82,54 @@ export class HistoryComponent implements OnInit {
 
   isExpanded(id: string): boolean {
     return this.expandedId() === id;
+  }
+
+  isSelected(id: string): boolean {
+    return this.selectedIds().has(id);
+  }
+
+  toggleSelect(id: string, event?: Event): void {
+    event?.stopPropagation();
+    const current = new Set(this.selectedIds());
+    if (current.has(id)) {
+      current.delete(id);
+    } else {
+      current.add(id);
+    }
+    this.selectedIds.set(current);
+  }
+
+  toggleSelectAll(): void {
+    const list = this.filtered();
+    if (this.allFilteredSelected()) {
+      this.selectedIds.set(new Set());
+    } else {
+      this.selectedIds.set(new Set(list.map(e => e.id)));
+    }
+  }
+
+  deleteSelected(): void {
+    const ids = [...this.selectedIds()];
+    if (!ids.length) return;
+    this.deleting.set(true);
+    this.reportsService.deleteHistoryEntries(ids).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.loadHistory();
+      },
+      error: () => this.deleting.set(false),
+    });
+  }
+
+  deleteAll(): void {
+    this.deleting.set(true);
+    this.reportsService.deleteAllHistory().subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.loadHistory();
+      },
+      error: () => this.deleting.set(false),
+    });
   }
 
   formatDuration(ms: number | null): string {

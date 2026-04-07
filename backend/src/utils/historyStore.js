@@ -55,4 +55,30 @@ function getRunning() {
   return history.filter(e => e.status === 'running');
 }
 
-module.exports = { add, update, getAll, getLastByType, getRunning };
+function cancelAllRunning() {
+  const now = new Date().toISOString();
+  history = history.map(e =>
+    e.status === 'running'
+      ? { ...e, status: 'error', error: 'Stopped manually', endTime: now }
+      : e
+  );
+  save();
+}
+
+function deleteById(id) {
+  history = history.filter(e => e.id !== id);
+  save();
+}
+
+function deleteByIds(ids) {
+  const idSet = new Set(ids);
+  history = history.filter(e => !idSet.has(e.id));
+  save();
+}
+
+function deleteAll() {
+  history = [];
+  save();
+}
+
+module.exports = { add, update, getAll, getLastByType, getRunning, cancelAllRunning, deleteById, deleteByIds, deleteAll };

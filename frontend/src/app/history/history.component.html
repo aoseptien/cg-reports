@@ -46,29 +46,54 @@
     </div>
   }
 
-  <!-- Filter tabs -->
-  <div class="filter-tabs">
-    <button
-      [class]="'tab ' + (filter() === 'all' ? 'active' : '')"
-      (click)="setFilter('all')"
-    >
-      All Runs
-      <span class="tab-count">{{ history().length }}</span>
-    </button>
-    <button
-      [class]="'tab ' + (filter() === 'daily' ? 'active' : '')"
-      (click)="setFilter('daily')"
-    >
-      📊 Daily
-      <span class="tab-count">{{ dailyCount() }}</span>
-    </button>
-    <button
-      [class]="'tab ' + (filter() === 'hourly' ? 'active' : '')"
-      (click)="setFilter('hourly')"
-    >
-      ⏰ Hourly
-      <span class="tab-count">{{ hourlyCount() }}</span>
-    </button>
+  <!-- Filter tabs + delete toolbar -->
+  <div class="toolbar-row">
+    <div class="filter-tabs">
+      <button
+        [class]="'tab ' + (filter() === 'all' ? 'active' : '')"
+        (click)="setFilter('all')"
+      >
+        All Runs
+        <span class="tab-count">{{ history().length }}</span>
+      </button>
+      <button
+        [class]="'tab ' + (filter() === 'daily' ? 'active' : '')"
+        (click)="setFilter('daily')"
+      >
+        📊 Daily
+        <span class="tab-count">{{ dailyCount() }}</span>
+      </button>
+      <button
+        [class]="'tab ' + (filter() === 'hourly' ? 'active' : '')"
+        (click)="setFilter('hourly')"
+      >
+        ⏰ Hourly
+        <span class="tab-count">{{ hourlyCount() }}</span>
+      </button>
+    </div>
+
+    @if (!loading() && history().length > 0) {
+      <div class="delete-toolbar">
+        @if (selectedCount() > 0) {
+          <span class="selected-label">{{ selectedCount() }} selected</span>
+          <button
+            class="btn btn-danger btn-sm"
+            (click)="deleteSelected()"
+            [disabled]="deleting()"
+          >
+            @if (deleting()) { <span class="spinner"></span> } 🗑 Delete Selected
+          </button>
+        }
+        <button
+          class="btn btn-ghost btn-sm"
+          (click)="deleteAll()"
+          [disabled]="deleting() || history().length === 0"
+          title="Delete all history"
+        >
+          🗑 Clear All
+        </button>
+      </div>
+    }
   </div>
 
   <!-- Error state -->
@@ -97,6 +122,19 @@
 
   <!-- History list -->
   @if (!loading() && filtered().length > 0) {
+    <!-- Select all row -->
+    <div class="select-all-row">
+      <label class="checkbox-label">
+        <input
+          type="checkbox"
+          class="entry-checkbox"
+          [checked]="allFilteredSelected()"
+          (change)="toggleSelectAll()"
+        />
+        <span class="text-muted" style="font-size:0.8125rem">Select all</span>
+      </label>
+    </div>
+
     <div class="history-list">
       @for (entry of filtered(); track entry.id) {
         <div
@@ -104,9 +142,20 @@
           [class.has-error]="entry.status === 'error'"
           [class.is-running]="entry.status === 'running'"
           [class.expanded]="isExpanded(entry.id)"
+          [class.is-selected]="isSelected(entry.id)"
         >
           <!-- Main row -->
           <div class="item-main" (click)="toggleExpand(entry.id)">
+            <!-- Checkbox -->
+            <div class="item-checkbox" (click)="$event.stopPropagation()">
+              <input
+                type="checkbox"
+                class="entry-checkbox"
+                [checked]="isSelected(entry.id)"
+                (change)="toggleSelect(entry.id, $event)"
+              />
+            </div>
+
             <div class="item-type">
               <span class="type-icon">{{ typeIcon(entry.type) }}</span>
               <div>

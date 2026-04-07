@@ -18,7 +18,30 @@
       "Bash(curl -s -X PUT http://localhost:3000/api/scheduler -H \"Content-Type: application/json\" -d \"{\\\\\"enabled\\\\\": false}\")",
       "Bash(curl -s http://localhost:3000/api/status)",
       "Bash(start /B node src/api/server.js)",
-      "Bash([ -d \"d:/Work/Reports/Web Reports/cg-reports/frontend/node_modules\" ])"
+      "Bash([ -d \"d:/Work/Reports/Web Reports/cg-reports/frontend/node_modules\" ])",
+      "Bash(npx ng:*)",
+      "Bash(netstat -ano)",
+      "Read(//d/Work/Reports/Web Reports/cg-reports/**)",
+      "Bash(xargs -I{} taskkill //PID {} //F)",
+      "Bash(cmd /c \"taskkill /F /IM node.exe\")",
+      "Bash(cmd /c \"cd /d \\\\\"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\\" && node src/api/server.js\")",
+      "Bash(cmd /c \"cd /d \\\\\"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\\" && start /B node src/api/server.js > server.log 2>&1\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/history/delete -H \"Content-Type: application/json\" -d \"{\\\\\"ids\\\\\":[]}\")",
+      "Bash(cmd /c \"taskkill /F /IM node.exe /T\")",
+      "Bash(cmd /c \"netstat -ano | findstr :3000\")",
+      "Bash(cmd /c \"cd /d \\\\\"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\\" && start /B node src/api/server.js\")",
+      "Bash(node --check \"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\src\\\\api\\\\server.js\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/run/stop -H \"Content-Type: application/json\")",
+      "Bash(cmd /c \"taskkill /F /IM node.exe /T 2>&1 && echo KILLED\")",
+      "Bash(cmd /c \"for /f \\\\\"tokens=5\\\\\" %a in \\('netstat -aon ^| findstr :3000'\\) do echo PID: %a\")",
+      "Bash(cmd /c \"netstat -aon\")",
+      "Bash(curl -v http://localhost:3000/api/status)",
+      "Bash(curl -v -X POST http://localhost:3000/api/history/delete -H \"Content-Type: application/json\" -d '{\"ids\":[]}')",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen | Select-Object -ExpandProperty OwningProcess\")",
+      "Bash(powershell -Command \"Stop-Process -Id 54976 -Force\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/history/delete -H \"Content-Type: application/json\" -d '{\"ids\":[]}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/history/delete -H \"Content-Type: application/json\" -d '{\"ids\":[\"test_123\"]}')",
+      "Bash(powershell -Command \"Stop-Process -Id 46900 -Force\")"
     ]
   }
 }

@@ -16,6 +16,14 @@ const logger = require('../utils/logger');
 
 const GHL_URL = process.env.GHL_URL || 'https://app.gohighlevel.com';
 
+// IDs de las 3 vistas de GHL
+const VIEW_IDS = {
+  calls:   '693cb39726f174d508425a3a', // Calls + Call Duration (tiene filtro de fecha)
+  mdhx:    '67cedf845c56fd033dbbf7f2', // MDHX + New Leads (till date)
+  unread:  '6942322a124aa5ffd948ad27', // Unread + Hot Leads (till date)
+};
+const CALLS_VIEW_ID = VIEW_IDS.calls;
+
 // Tiempo máximo esperando que una pestaña cargue datos (ms)
 const WAIT_TIMEOUT = 60000;
 // Intervalo de polling para verificar que los datos cargaron (ms)
@@ -40,32 +48,37 @@ const SELECTORS = {
  * @param {string[]} coordinators - Lista de coordinadoras del Sheet
  * @returns {Promise<Object[]>} Array de objetos con datos por coordinadora
  */
-async function scrapeGHL(reportType, coordinators) {
+async function scrapeGHL(reportType, coordinators, reportDate) {
   const headless = process.env.PUPPETEER_HEADLESS !== 'false';
   const browser = await getBrowser(headless);
 
-  logger.info(`GHL Scraper iniciado — tipo: ${reportType}`);
+  logger.info(`GHL Scraper iniciado — tipo: ${reportType}, fecha: ${reportDate || 'hoy'}`);
 
   try {
     // 1. Buscar las 3 pestañas CG CRM ya abiertas o navegarlas
     const tabs = await findOrOpenCGCRMTabs(browser);
 
     if (tabs.length === 0) {
-      throw new Error('No se encontraron pestañas CG CRM. Verifica que GHL esté abierto.');
+      throw new Error('No GHL tabs found. Make sure GoHighLevel is open in Chrome.');
     }
 
-    logger.info(`Pestañas CG CRM encontradas: ${tabs.length}`);
+    logger.info(`CG CRM tabs found: ${tabs.length}`);
 
     // 2. Refrescar todas las pestañas y esperar datos válidos
     const tabData = [];
     for (let i = 0; i < tabs.length; i++) {
-      logger.info(`Procesando pestaña ${i + 1}/${tabs.length}...`);
-      const data = await refreshAndExtract(tabs[i], reportType, i + 1);
+      const pageUrl = tabs[i].url();
+      const isCallsTab = pageUrl.includes(CALLS_VIEW_ID);
+      const tabName = pageUrl.includes(VIEW_IDS.calls) ? 'Calls' :
+                      pageUrl.includes(VIEW_IDS.mdhx)  ? 'MDHX'  :
+                      pageUrl.includes(VIEW_IDS.unread) ? 'Unread' : `Tab ${i+1}`;
+      logger.info(`Processing tab ${i + 1}/${tabs.length} [${tabName}]...`);
+      const data = await refreshAndExtract(tabs[i], reportType, tabName, isCallsTab ? reportDate : null);
       if (data) tabData.push(data);
     }
 
     if (tabData.length === 0) {
-      throw new Error('No se pudo extraer datos de ninguna pestaña CG CRM.');
+      throw new Error('Could not extract data from any GHL tab.');
     }
 
     // 3. Combinar datos de las 3 pestañas por coordinadora
@@ -85,27 +98,43 @@ async function scrapeGHL(reportType, coordinators) {
  */
 async function findOrOpenCGCRMTabs(browser) {
   const pages = await browser.pages();
-  const cgcrmPages = [];
+
+  // Buscar cada vista por su ID específico en la URL
+  const found = { calls: null, mdhx: null, unread: null };
 
   for (const page of pages) {
     try {
-      const title = await page.title();
       const url = page.url();
-      if (
-        title.includes('CG CRM') ||
-        url.includes('gohighlevel.com') && url.includes('reporting')
-      ) {
-        cgcrmPages.push(page);
-      }
+      if (url.includes(VIEW_IDS.calls))  { found.calls  = page; logger.info(`Tab Calls encontrada:  ${url}`); }
+      if (url.includes(VIEW_IDS.mdhx))   { found.mdhx   = page; logger.info(`Tab MDHX encontrada:   ${url}`); }
+      if (url.includes(VIEW_IDS.unread)) { found.unread  = page; logger.info(`Tab Unread encontrada: ${url}`); }
     } catch (_) {}
   }
 
-  // Si no hay pestañas abiertas, abrir la URL base de GHL
+  // Construir array en orden: calls, mdhx, unread (solo las encontradas)
+  const cgcrmPages = [found.calls, found.mdhx, found.unread].filter(Boolean);
+
   if (cgcrmPages.length === 0) {
-    logger.warn('No hay pestañas CG CRM abiertas. Abriendo GHL...');
-    const page = await newPage(browser);
-    await page.goto(GHL_URL, { waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT });
-    cgcrmPages.push(page);
+    logger.warn('No GHL tabs found. Opening the 3 views...');
+    const locationId = 'rHMXO7Gw3WApjNUYak4P';
+    for (const [name, viewId] of Object.entries(VIEW_IDS)) {
+      const page = await newPage(browser);
+      const url = `${GHL_URL}/v2/location/${locationId}/reporting/reports/view/${viewId}`;
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT });
+      logger.info(`Tab ${name} abierta: ${url}`);
+      cgcrmPages.push(page);
+    }
+  } else {
+    const missing = Object.entries(found).filter(([, p]) => !p).map(([k]) => k);
+    if (missing.length > 0) logger.warn(`Tabs not found: ${missing.join(', ')} — opening...`);
+    for (const key of missing) {
+      const locationId = 'rHMXO7Gw3WApjNUYak4P';
+      const page = await newPage(browser);
+      const url = `${GHL_URL}/v2/location/${locationId}/reporting/reports/view/${VIEW_IDS[key]}`;
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT });
+      logger.info(`Tab ${key} abierta: ${url}`);
+      cgcrmPages.push(page);
+    }
   }
 
   return cgcrmPages;
@@ -114,35 +143,139 @@ async function findOrOpenCGCRMTabs(browser) {
 /**
  * Refresca una pestaña y espera a que tenga datos válidos
  */
-async function refreshAndExtract(page, reportType, tabIndex) {
+async function refreshAndExtract(page, reportType, tabIndex, dateFilter) {
   try {
-    logger.info(`Tab ${tabIndex}: refrescando con Ctrl+Shift+R...`);
+    logger.info(`Tab [${tabIndex}]: refreshing${dateFilter ? ` (date: ${dateFilter})` : ''}...`);
 
-    // Hard refresh (Ctrl+Shift+R = ignora caché)
+    // Hard refresh
     await page.keyboard.down('Control');
     await page.keyboard.down('Shift');
     await page.keyboard.press('r');
     await page.keyboard.up('Shift');
     await page.keyboard.up('Control');
 
-    // Esperar navegación
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT })
-      .catch(() => {}); // ignorar timeout si no hubo navegación
+      .catch(() => {});
 
-    // Esperar que los datos carguen (sin spinner, sin error, con valores)
-    const loaded = await waitForValidData(page, tabIndex);
-    if (!loaded) {
-      logger.warn(`Tab ${tabIndex}: timeout esperando datos. Continuando con lo disponible.`);
+    // Si esta pestaña tiene filtro de fecha (Calls), aplicarlo
+    if (dateFilter) {
+      await applyDateFilter(page, tabIndex, dateFilter);
     }
 
-    // Extraer datos de la página
+    const loaded = await waitForValidData(page, tabIndex);
+    if (!loaded) {
+      logger.warn(`Tab ${tabIndex}: timeout esperando datos. Continuing with available data.`);
+    }
+
     const data = await extractPageData(page, reportType, tabIndex);
     return data;
 
   } catch (err) {
-    logger.error(`Tab ${tabIndex}: error al procesar — ${err.message}`);
+    logger.error(`Tab ${tabIndex}: processing error — ${err.message}`);
     return null;
   }
+}
+
+/**
+ * Aplica el filtro de fecha en la vista de Calls de GHL
+ * Determina si usar "Today", "Yesterday" o "Custom Range"
+ */
+async function applyDateFilter(page, tabIndex, dateStr) {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    logger.info(`Tab ${tabIndex}: applying date filter → ${dateStr}`);
+
+    // Click en el botón del filtro de fecha (muestra "Today", "Yesterday", etc.)
+    const dateBtn = await page.$('[class*="date-picker"], [class*="datepicker"], button:has([class*="calendar"]), button[class*="date"]');
+    if (!dateBtn) {
+      // Intentar por texto del botón
+      const buttons = await page.$$('button');
+      let found = false;
+      for (const btn of buttons) {
+        const text = await btn.evaluate(el => el.innerText?.trim());
+        if (['Today', 'Yesterday', 'Last 7', 'This Month', 'Custom'].some(t => text?.includes(t))) {
+          await btn.click();
+          found = true;
+          logger.info(`Tab ${tabIndex}: date button found: "${text}"`);
+          break;
+        }
+      }
+      if (!found) {
+        logger.warn(`Tab ${tabIndex}: date filter button not found.`);
+        return;
+      }
+    } else {
+      await dateBtn.click();
+    }
+
+    await sleep(800);
+
+    // Seleccionar la opción correcta según la fecha
+    if (dateStr === today) {
+      await clickDateOption(page, tabIndex, 'Today');
+    } else if (dateStr === yesterday) {
+      await clickDateOption(page, tabIndex, 'Yesterday');
+    } else {
+      await selectCustomDate(page, tabIndex, dateStr);
+    }
+
+    // Esperar que los datos recarguen
+    await sleep(2000);
+    logger.info(`Tab ${tabIndex}: date filter applied.`);
+
+  } catch (err) {
+    logger.warn(`Tab ${tabIndex}: could not apply date filter — ${err.message}`);
+  }
+}
+
+async function clickDateOption(page, tabIndex, optionText) {
+  const items = await page.$$('[class*="dropdown"] li, [class*="menu"] li, [role="option"], [class*="option"]');
+  for (const item of items) {
+    const text = await item.evaluate(el => el.innerText?.trim());
+    if (text === optionText || text?.startsWith(optionText)) {
+      await item.click();
+      logger.info(`Tab ${tabIndex}: option "${optionText}" selected.`);
+      return;
+    }
+  }
+  logger.warn(`Tab ${tabIndex}: option "${optionText}" not found in dropdown.`);
+}
+
+async function selectCustomDate(page, tabIndex, dateStr) {
+  // Buscar opción "Custom" o "Custom Range"
+  const items = await page.$$('[class*="dropdown"] li, [class*="menu"] li, [role="option"], [class*="option"]');
+  for (const item of items) {
+    const text = await item.evaluate(el => el.innerText?.trim());
+    if (text?.toLowerCase().includes('custom')) {
+      await item.click();
+      await sleep(800);
+      logger.info(`Tab ${tabIndex}: "Custom Range" seleccionado.`);
+      break;
+    }
+  }
+
+  // Ingresar la fecha en los inputs de fecha
+  // GHL usa formato MM/DD/YYYY
+  const [year, month, day] = dateStr.split('-');
+  const formatted = `${month}/${day}/${year}`;
+
+  const dateInputs = await page.$$('input[type="date"], input[placeholder*="date"], input[placeholder*="Date"], input[class*="date"]');
+  if (dateInputs.length >= 1) {
+    await dateInputs[0].triple_click?.() || await dateInputs[0].click({ clickCount: 3 });
+    await dateInputs[0].type(formatted);
+  }
+  if (dateInputs.length >= 2) {
+    await dateInputs[1].triple_click?.() || await dateInputs[1].click({ clickCount: 3 });
+    await dateInputs[1].type(formatted);
+  }
+
+  // Confirmar
+  const applyBtn = await page.$('button[class*="apply"], button[class*="confirm"], button:has-text("Apply")');
+  if (applyBtn) await applyBtn.click();
+
+  logger.info(`Tab ${tabIndex}: fecha custom aplicada: ${formatted}`);
 }
 
 /**
@@ -176,12 +309,12 @@ async function waitForValidData(page, tabIndex) {
       });
 
       if (!state.hasLoading && !state.hasError && state.hasNumbers) {
-        logger.info(`Tab ${tabIndex}: datos válidos detectados.`);
+        logger.info(`Tab ${tabIndex}: valid data detected.`);
         return true;
       }
 
       if (state.hasError) {
-        logger.warn(`Tab ${tabIndex}: error detectado en página.`);
+        logger.warn(`Tab ${tabIndex}: error detected on page.`);
         return false;
       }
 
@@ -198,7 +331,7 @@ async function waitForValidData(page, tabIndex) {
  * GHL muestra tarjetas con "Nombre MDHX", "Nombre New Lead", etc.
  */
 async function extractPageData(page, reportType, tabIndex) {
-  logger.info(`Tab ${tabIndex}: extrayendo datos...`);
+  logger.info(`Tab ${tabIndex}: extracting data...`);
 
   const rawData = await page.evaluate((type) => {
     const result = { cards: [], pageTitle: document.title, url: window.location.href };
@@ -229,7 +362,7 @@ async function extractPageData(page, reportType, tabIndex) {
 
   // Parsear los datos según el tipo de reporte
   const parsed = parseGHLPageData(rawData, reportType, tabIndex);
-  logger.info(`Tab ${tabIndex}: ${Object.keys(parsed).length} coordinadoras extraídas.`);
+  logger.info(`Tab ${tabIndex}: ${Object.keys(parsed).length} coordinators extracted.`);
   return parsed;
 }
 

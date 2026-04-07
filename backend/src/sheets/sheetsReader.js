@@ -24,7 +24,7 @@ async function getCoordinatorsFromSheet(spreadsheetId) {
     const lastSheet = sheetsList[sheetsList.length - 1];
     const sheetName = lastSheet.properties.title;
 
-    logger.info(`Leyendo coordinadoras desde sheet: "${sheetName}"`);
+    logger.info(`Reading coordinators from sheet: "${sheetName}"`);
 
     // 2. Leer la columna A completa de la última pestaña
     const response = await sheets.spreadsheets.values.get({
@@ -45,7 +45,7 @@ async function getCoordinatorsFromSheet(spreadsheetId) {
     }
 
     if (headerIdx === -1) {
-      logger.warn('No se encontró header USER en el Sheet');
+      logger.warn('USER header not found in Sheet.');
       return [];
     }
 
@@ -60,7 +60,7 @@ async function getCoordinatorsFromSheet(spreadsheetId) {
       }
     }
 
-    logger.info(`Coordinadoras encontradas: ${coordinators.length} → ${coordinators.join(', ')}`);
+    logger.info(`Coordinators found: ${coordinators.length} → ${coordinators.join(', ')}`);
     return coordinators;
 
   } catch (err) {

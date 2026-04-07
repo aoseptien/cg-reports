@@ -18,6 +18,7 @@ const { generateDailyGHLCsv, generateHourlyGHLCsv, cleanOldOutputFiles } = requi
 const { uploadReportFiles } = require('../drive/driveUploader');
 const { triggerSheetScript } = require('../sheets/scriptTrigger');
 const { getCoordinatorsFromSheet } = require('../sheets/sheetsReader');
+const attendanceStore = require('../utils/attendanceStore');
 const { getDailyFileName, getHourlyFileName, get3CXFileName } = require('../utils/dateUtils');
 const historyStore = require('../utils/historyStore');
 const logger = require('../utils/logger');
@@ -25,9 +26,10 @@ const logger = require('../utils/logger');
 /**
  * Ejecuta el Daily Report completo
  */
-async function runDailyReport() {
+async function runDailyReport({ date } = {}) {
   const reportId = `daily_${Date.now()}`;
   const startTime = new Date();
+  const reportDate = date || new Date().toISOString().split('T')[0];
 
   logger.info('═══════════════════════════════════════');
   logger.info('  DAILY REPORT — ' + startTime.toLocaleString());
@@ -42,12 +44,18 @@ async function runDailyReport() {
 
   try {
     // 1. Leer coordinadoras del Sheet
-    const coordinators = await getCoordinatorsFromSheet(process.env.SHEETS_DAILY_ID);
-    if (!coordinators.length) throw new Error('No se encontraron coordinadoras en el Daily Sheet.');
+    // Daily solo excluye a las que faltaron TODO el día (las que se fueron a mitad SÍ aparecen)
+    const allCoordinators = await getCoordinatorsFromSheet(process.env.SHEETS_DAILY_ID);
+    if (!allCoordinators.length) throw new Error('No coordinators found in Daily Sheet.');
+    const excluded = attendanceStore.getExcludedForDaily();
+    const coordinators = allCoordinators.filter(c => !excluded.includes(c));
+    if (excluded.length > 0) logger.info(`Daily — excluded (absent all day): ${excluded.join(', ')}`);
+
+    logger.info(`Report date: ${reportDate}`);
 
     // 2. Scraping GHL
-    logger.info('Paso 1/4: Extrayendo datos de GoHighLevel...');
-    const ghlData = await scrapeGHL('daily', coordinators);
+    logger.info('Step 1/4: Extracting GoHighLevel data...');
+    const ghlData = await scrapeGHL('daily', coordinators, reportDate);
 
     // 3. Generar CSV de GHL
     const ghlFileName = getDailyFileName();
@@ -55,13 +63,13 @@ async function runDailyReport() {
     const ghlPath = generateDailyGHLCsv(ghlData, ghlFileName);
 
     // 4. Scraping 3CX
-    logger.info('Paso 2/4: Extrayendo datos de 3CX...');
+    logger.info('Step 2/4: Extracting 3CX data...');
     const threecxFileName = get3CXFileName('daily');
     cleanOldOutputFiles('3CX_Daily');
-    const threecxPath = await scrape3CX(threecxFileName);
+    const threecxPath = await scrape3CX(threecxFileName, reportDate);
 
     // 5. Subir a Google Drive
-    logger.info('Paso 3/4: Subiendo CSVs a Google Drive...');
+    logger.info('Step 3/4: Uploading CSVs to Google Drive...');
     await uploadReportFiles({
       ghlPath,
       ghlName: ghlFileName,
@@ -71,8 +79,8 @@ async function runDailyReport() {
     });
 
     // 6. Disparar script del Sheet
-    logger.info('Paso 4/4: Ejecutando script del Google Sheet...');
-    await triggerSheetScript('daily', process.env.SHEETS_DAILY_ID, process.env.APPS_SCRIPT_DAILY_ID);
+    logger.info('Step 4/4: Triggering Google Sheet script...');
+    await triggerSheetScript('daily');
 
     const endTime = new Date();
     const durationSec = Math.round((endTime - startTime) / 1000);
@@ -85,7 +93,7 @@ async function runDailyReport() {
       coordinators: coordinators.length,
     });
 
-    logger.info(`✅ Daily Report completado en ${durationSec}s`);
+    logger.info(`✅ Daily Report completed in ${durationSec}s`);
     logger.info('═══════════════════════════════════════\n');
 
     return { success: true, durationSec, files: [ghlFileName, threecxFileName] };
@@ -97,7 +105,7 @@ async function runDailyReport() {
       endTime: new Date().toISOString(),
     });
 
-    logger.error(`❌ Daily Report FALLIDO: ${err.message}`);
+    logger.error(`❌ Daily Report FAILED: ${err.message}`);
     logger.info('═══════════════════════════════════════\n');
 
     throw err;
@@ -124,11 +132,15 @@ async function runHourlyReport() {
 
   try {
     // 1. Leer coordinadoras del Sheet
-    const coordinators = await getCoordinatorsFromSheet(process.env.SHEETS_HOURLY_ID);
-    if (!coordinators.length) throw new Error('No se encontraron coordinadoras en el Hourly Sheet.');
+    // Hourly excluye a las que faltaron todo el día + las que se fueron a mitad
+    const allCoordinators = await getCoordinatorsFromSheet(process.env.SHEETS_HOURLY_ID);
+    if (!allCoordinators.length) throw new Error('No coordinators found in Hourly Sheet.');
+    const excluded = attendanceStore.getExcludedForHourly();
+    const coordinators = allCoordinators.filter(c => !excluded.includes(c));
+    if (excluded.length > 0) logger.info(`Hourly — excluded (absent or left early): ${excluded.join(', ')}`);
 
     // 2. Scraping GHL
-    logger.info('Paso 1/4: Extrayendo datos de GoHighLevel...');
+    logger.info('Step 1/4: Extracting GoHighLevel data...');
     const ghlData = await scrapeGHL('hourly', coordinators);
 
     // 3. Generar CSV de GHL
@@ -136,13 +148,13 @@ async function runHourlyReport() {
     const ghlPath = generateHourlyGHLCsv(ghlData, ghlFileName);
 
     // 4. Scraping 3CX
-    logger.info('Paso 2/4: Extrayendo datos de 3CX...');
+    logger.info('Step 2/4: Extracting 3CX data...');
     const threecxFileName = get3CXFileName('hourly');
     cleanOldOutputFiles('3CX_Hourly');
-    const threecxPath = await scrape3CX(threecxFileName);
+    const threecxPath = await scrape3CX(threecxFileName, new Date().toISOString().split('T')[0]);
 
     // 5. Subir a Google Drive
-    logger.info('Paso 3/4: Subiendo CSVs a Google Drive...');
+    logger.info('Step 3/4: Uploading CSVs to Google Drive...');
     await uploadReportFiles({
       ghlPath,
       ghlName: ghlFileName,
@@ -152,8 +164,8 @@ async function runHourlyReport() {
     });
 
     // 6. Disparar script del Sheet
-    logger.info('Paso 4/4: Ejecutando script del Google Sheet...');
-    await triggerSheetScript('hourly', process.env.SHEETS_HOURLY_ID, process.env.APPS_SCRIPT_HOURLY_ID);
+    logger.info('Step 4/4: Triggering Google Sheet script...');
+    await triggerSheetScript('hourly');
 
     const endTime = new Date();
     const durationSec = Math.round((endTime - startTime) / 1000);
@@ -166,7 +178,7 @@ async function runHourlyReport() {
       coordinators: coordinators.length,
     });
 
-    logger.info(`✅ Hourly Report completado en ${durationSec}s`);
+    logger.info(`✅ Hourly Report completed in ${durationSec}s`);
     logger.info('═══════════════════════════════════════\n');
 
     return { success: true, durationSec, files: [ghlFileName, threecxFileName] };
@@ -178,7 +190,7 @@ async function runHourlyReport() {
       endTime: new Date().toISOString(),
     });
 
-    logger.error(`❌ Hourly Report FALLIDO: ${err.message}`);
+    logger.error(`❌ Hourly Report FAILED: ${err.message}`);
     logger.info('═══════════════════════════════════════\n');
 
     throw err;

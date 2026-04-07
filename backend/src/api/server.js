@@ -13,8 +13,10 @@ const path = require('path');
 const logger = require('../utils/logger');
 const { startScheduler, getSchedulerStatus, saveConfig, restartScheduler } = require('../scheduler/cronScheduler');
 const { runDailyReport, runHourlyReport } = require('../automation/reportRunner');
-const { getAll, getLastByType, getRunning } = require('../utils/historyStore');
+const { getAll, getLastByType, getRunning, cancelAllRunning, deleteById, deleteByIds, deleteAll } = require('../utils/historyStore');
 const { getAuthUrl, exchangeCodeForTokens, isAuthenticated } = require('../drive/googleAuth');
+const { getCoordinatorsFromSheet } = require('../sheets/sheetsReader');
+const attendanceStore = require('../utils/attendanceStore');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -92,7 +94,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     online: true,
     googleAuth: isAuthenticated(),
-    scheduler: getSchedulerStatus(),
+    scheduler: getSchedulerStatus().enabled,
     running: getRunning().length > 0,
     lastDaily: getLastByType('daily'),
     lastHourly: getLastByType('hourly'),
@@ -106,29 +108,41 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/run/daily', async (req, res) => {
   if (runningTasks.has('daily')) {
-    return res.status(409).json({ error: 'Daily Report ya está en ejecución.' });
+    return res.status(409).json({ error: 'Daily Report is already running.' });
   }
 
-  res.json({ message: 'Daily Report iniciado.', startTime: new Date().toISOString() });
+  const reportDate = req.body.date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  res.json({ message: 'Daily Report started.', startTime: new Date().toISOString(), date: reportDate });
 
-  // Ejecutar en background (no bloquea la respuesta)
   runningTasks.add('daily');
-  runDailyReport()
-    .catch(err => logger.error(`Manual Daily falló: ${err.message}`))
+  runDailyReport({ date: reportDate })
+    .catch(err => logger.error(`Manual Daily failed: ${err.message}`))
     .finally(() => runningTasks.delete('daily'));
 });
 
 app.post('/api/run/hourly', async (req, res) => {
   if (runningTasks.has('hourly')) {
-    return res.status(409).json({ error: 'Hourly Report ya está en ejecución.' });
+    return res.status(409).json({ error: 'Hourly Report is already running.' });
   }
 
-  res.json({ message: 'Hourly Report iniciado.', startTime: new Date().toISOString() });
+  res.json({ message: 'Hourly Report started.', startTime: new Date().toISOString() });
 
   runningTasks.add('hourly');
   runHourlyReport()
-    .catch(err => logger.error(`Manual Hourly falló: ${err.message}`))
+    .catch(err => logger.error(`Manual Hourly failed: ${err.message}`))
     .finally(() => runningTasks.delete('hourly'));
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// STOP — Forzar detención de tareas en curso
+// ─────────────────────────────────────────────────────────────────────
+
+app.post('/api/run/stop', (req, res) => {
+  const stopped = [...runningTasks];
+  runningTasks.clear();
+  cancelAllRunning();
+  logger.warn(`⚠️  Manually stopped. Tasks cancelled: ${stopped.join(', ') || 'none'}`);
+  res.json({ success: true, stopped });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -143,6 +157,17 @@ app.get('/api/history', (req, res) => {
   if (type) history = history.filter(e => e.type === type);
 
   res.json(history.slice(0, limit));
+});
+
+app.post('/api/history/delete', (req, res) => {
+  const { ids } = req.body;
+  if (Array.isArray(ids) && ids.length > 0) {
+    deleteByIds(ids);
+    res.json({ success: true, deleted: ids.length });
+  } else {
+    deleteAll();
+    res.json({ success: true, deleted: 'all' });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -161,6 +186,53 @@ app.put('/api/scheduler', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// COORDINATORS — Lista y asistencia del día
+// ─────────────────────────────────────────────────────────────────────
+
+/** Obtiene la lista de coordinadoras del Sheet + estado de asistencia de hoy */
+app.get('/api/coordinators', async (req, res) => {
+  try {
+    const all = await getCoordinatorsFromSheet(process.env.SHEETS_DAILY_ID);
+    const attendance = attendanceStore.getAttendance();
+    res.json({
+      coordinators: all,
+      absentAllDay: attendance.absentAllDay,
+      leftEarly: attendance.leftEarly,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Guarda el estado de asistencia del día */
+app.put('/api/coordinators/attendance', (req, res) => {
+  try {
+    const { absentAllDay, leftEarly } = req.body;
+    if (!Array.isArray(absentAllDay) || !Array.isArray(leftEarly)) {
+      return res.status(400).json({ error: 'absentAllDay y leftEarly deben ser arrays.' });
+    }
+    attendanceStore.setAttendance({ absentAllDay, leftEarly });
+    res.json({ success: true, absentAllDay, leftEarly });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// LOGS — Live log buffer para el dashboard
+// ─────────────────────────────────────────────────────────────────────
+
+app.get('/api/logs', (req, res) => {
+  const n = parseInt(req.query.n) || 80;
+  res.json(logger.getRecentLogs(n));
+});
+
+app.delete('/api/logs', (req, res) => {
+  logger.clearLogs();
+  res.json({ success: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────

@@ -1,357 +1,256 @@
 /**
  * 3CX Scraper
  * ─────────────────────────────────────────────────────────────────────
- * Navega a https://3cx.cg-suite.com (Admin Console)
- * → Reports → Extension Statistics
- * → Dept 200 - Sales Coordinators
- * → Range: Today
- * → Export CSV
+ * Navigates directly to the Extension Statistics URL with the correct
+ * periodType and group filter, then clicks Export CSV.
  *
- * Retorna el contenido del CSV descargado como string.
+ * URL format:
+ *   https://3cx.cg-suite.com/#/office/reports/extension-statistic
+ *     ?filter={"periodType":<N>,"pbxGroup":"GRP0009"}
+ *
+ * periodType mapping:
+ *   6 = Today
+ *   7 = Yesterday
+ *   0 = Custom (uses fromDate/toDate)
  * ─────────────────────────────────────────────────────────────────────
  */
 
 const path = require('path');
 const fs = require('fs');
-const { getBrowser, newPage, waitForLoad } = require('./browserManager');
+const { getBrowser, newPage } = require('./browserManager');
 const logger = require('../utils/logger');
 
 const THREECX_URL = process.env.THREECX_URL || 'https://3cx.cg-suite.com';
+const PBX_GROUP  = 'GRP0009';
 const WAIT_TIMEOUT = 60000;
-const DEPT_TARGET = 'Dept 200';
 const OUTPUT_DIR = path.join(__dirname, '../../output');
 
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
+// ── Helpers ────────────────────────────────────────────────────────────
+
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getYesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split('T')[0];
+}
+
 /**
- * Extrae el reporte de Extension Statistics de 3CX
- * @returns {Promise<string>} Ruta del archivo CSV descargado
+ * Builds the filter object based on the requested date (YYYY-MM-DD).
+ *  today     → periodType 6
+ *  yesterday → periodType 7
+ *  other     → periodType 3 with periodFromTo: [dateT00:00, (date+1)T00:00]
  */
-async function scrape3CX(outputFileName) {
+function buildFilter(dateStr) {
+  const today     = getToday();
+  const yesterday = getYesterday();
+
+  if (!dateStr || dateStr === today) {
+    return { periodType: 6, pbxGroup: PBX_GROUP };
+  }
+  if (dateStr === yesterday) {
+    return { periodType: 7, pbxGroup: PBX_GROUP };
+  }
+  // Custom date: from midnight that day to midnight next day
+  const nextDay = new Date(dateStr);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const nextDayStr = nextDay.toISOString().split('T')[0];
+  return {
+    periodType: 3,
+    periodFromTo: [`${dateStr}T00:00`, `${nextDayStr}T00:00`],
+    pbxGroup: PBX_GROUP,
+  };
+}
+
+/**
+ * Builds the full URL for the Extension Statistics report.
+ */
+function buildReportUrl(dateStr) {
+  const filter = buildFilter(dateStr);
+  const encoded = encodeURIComponent(JSON.stringify(filter));
+  return `${THREECX_URL}/#/office/reports/extension-statistic?filter=${encoded}`;
+}
+
+// ── Main ───────────────────────────────────────────────────────────────
+
+/**
+ * Scrapes 3CX Extension Statistics for a given date.
+ * @param {string} outputFileName - Desired CSV filename
+ * @param {string} dateStr - Date to report on (YYYY-MM-DD). Defaults to today.
+ * @returns {Promise<string>} Path to the downloaded CSV
+ */
+async function scrape3CX(outputFileName, dateStr) {
   const headless = process.env.PUPPETEER_HEADLESS !== 'false';
   const browser = await getBrowser(headless);
-
-  logger.info('3CX Scraper iniciado...');
-
-  // Configurar carpeta de descarga de Puppeteer
   const downloadPath = path.resolve(OUTPUT_DIR);
+  const reportUrl = buildReportUrl(dateStr);
 
-  // Buscar pestaña 3CX ya abierta o abrir una nueva
+  logger.info(`3CX Scraper started — date: ${dateStr || 'today'}`);
+  logger.info(`Navigating to: ${reportUrl}`);
+
   const page = await findOrOpen3CXPage(browser);
 
   try {
-    // Configurar directorio de descarga
+    // Set download directory
     const client = await page.createCDPSession();
     await client.send('Page.setDownloadBehavior', {
       behavior: 'allow',
       downloadPath,
     });
 
-    // Navegar a Reports → Extension Statistics
-    await navigateToExtensionStats(page);
+    // Navigate directly to the filtered report URL
+    await page.goto(reportUrl, { waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT });
+    logger.info('Page loaded. Waiting for data table...');
 
-    // Configurar filtros: Dept 200 + Today
-    await configureFilters(page);
+    // Wait for the data table to appear (extension rows)
+    await waitForTable(page);
+    logger.info('Data table ready. Clicking Export CSV...');
 
-    // Exportar CSV y obtener ruta
-    const csvPath = await exportCSV(page, client, outputFileName, downloadPath);
+    // Set up download listener before clicking
+    const downloadPromise = waitForDownload(client, downloadPath);
 
-    logger.info(`✅ 3CX CSV exportado: ${csvPath}`);
-    return csvPath;
+    // Click Export CSV
+    const clicked = await clickExportCSV(page);
+    if (!clicked) {
+      throw new Error('Export CSV button not found');
+    }
+
+    // Wait for download (max 30s)
+    const downloadedPath = await Promise.race([
+      downloadPromise,
+      sleep(30000).then(() => null),
+    ]);
+
+    if (!downloadedPath) {
+      throw new Error('Timeout waiting for 3CX CSV download.');
+    }
+
+    // Rename to desired output name
+    const finalPath = path.join(downloadPath, outputFileName);
+    if (downloadedPath !== finalPath && fs.existsSync(downloadedPath)) {
+      fs.renameSync(downloadedPath, finalPath);
+    }
+
+    logger.info(`✅ 3CX CSV exported: ${finalPath}`);
+    return finalPath;
 
   } catch (err) {
-    logger.error(`Error en 3CX Scraper: ${err.message}`);
+    logger.error(`3CX Scraper error: ${err.message}`);
     throw err;
   }
 }
 
+// ── Page helpers ───────────────────────────────────────────────────────
+
 /**
- * Busca la pestaña 3CX abierta o abre una nueva
+ * Reuses an existing 3CX tab or opens a new one.
  */
 async function findOrOpen3CXPage(browser) {
   const pages = await browser.pages();
-
   for (const p of pages) {
     try {
-      const url = p.url();
-      if (url.includes('3cx.cg-suite.com')) {
-        logger.info('Pestaña 3CX existente encontrada.');
+      if (p.url().includes('3cx.cg-suite.com')) {
+        logger.info('Reusing existing 3CX tab.');
         return p;
       }
     } catch (_) {}
   }
-
-  logger.info('Abriendo nueva pestaña para 3CX...');
+  logger.info('Opening new 3CX tab...');
   const page = await newPage(browser);
   await page.goto(THREECX_URL, { waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT });
   return page;
 }
 
 /**
- * Navega al menú Reports → Extension Statistics
+ * Waits for the report table to have at least one data row.
+ * Tries multiple selectors used by the 3CX Angular app.
  */
-async function navigateToExtensionStats(page) {
-  logger.info('Navegando a Reports → Extension Statistics...');
+async function waitForTable(page) {
+  const tableSelectors = [
+    'table tbody tr',
+    '.ag-row',
+    '.report-table tr',
+    '[class*="grid-row"]',
+    '[class*="table-row"]',
+    'tr[class*="data"]',
+  ];
 
-  const currentUrl = page.url();
-
-  // Si ya estamos en Extension Statistics, solo refrescar
-  if (currentUrl.includes('/reports') || currentUrl.includes('ExtensionStats')) {
-    await page.reload({ waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT });
-    logger.info('Página de reportes recargada.');
-    return;
+  for (const sel of tableSelectors) {
+    try {
+      await page.waitForSelector(sel, { timeout: 15000 });
+      logger.info(`Table found with selector: ${sel}`);
+      return;
+    } catch (_) {}
   }
 
-  // Buscar y hacer click en "Reports" en el menú lateral
-  try {
-    await page.waitForSelector('[data-testid="reports"], a[href*="report"], .reports-menu, #Reports', {
-      timeout: 15000,
-    });
+  // Fallback: wait for network to settle after load
+  logger.warn('Table selector not matched — waiting extra 5s for data to render...');
+  await sleep(5000);
+}
 
-    // Click en Reports
-    await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a, button, [class*="menu-item"]'));
-      const reportsLink = links.find(el =>
-        el.textContent?.trim().toLowerCase() === 'reports' ||
-        el.getAttribute('href')?.includes('report')
+/**
+ * Finds and clicks the Export CSV button.
+ * Returns true if clicked, false if not found.
+ */
+async function clickExportCSV(page) {
+  // Extra wait for the button to become active after data loads
+  await sleep(1500);
+
+  const clicked = await page.evaluate(() => {
+    // Try buttons and links with various text/attribute patterns
+    const candidates = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+
+    const exportBtn = candidates.find(el => {
+      const text = (el.textContent || '').trim().toLowerCase();
+      const title = (el.getAttribute('title') || '').toLowerCase();
+      const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+      return (
+        text.includes('export csv') ||
+        text === 'export' ||
+        title.includes('export csv') ||
+        title.includes('csv') ||
+        ariaLabel.includes('export csv') ||
+        ariaLabel.includes('csv') ||
+        el.className?.includes?.('export')
       );
-      if (reportsLink) reportsLink.click();
     });
 
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: WAIT_TIMEOUT }).catch(() => {});
-
-  } catch (_) {
-    // Intentar URL directa
-    logger.info('Intentando URL directa de Extension Statistics...');
-    await page.goto(`${THREECX_URL}/#/app/reports/extension-statistics`, {
-      waitUntil: 'networkidle2',
-      timeout: WAIT_TIMEOUT,
-    });
-  }
-
-  // Buscar "Extension Statistics" en el submenú
-  try {
-    await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a, button, li, [class*="submenu"]'));
-      const extStats = links.find(el =>
-        el.textContent?.toLowerCase().includes('extension stat')
-      );
-      if (extStats) extStats.click();
-    });
-
-    await sleep(2000);
-    await waitForLoad(page, 15000).catch(() => {});
-
-  } catch (_) {
-    logger.warn('No se pudo hacer click en Extension Statistics. Continuando...');
-  }
-
-  logger.info('En página de Extension Statistics.');
-}
-
-/**
- * Configura los filtros: Range = Today, Dept = 200 Sales Coordinators
- */
-async function configureFilters(page) {
-  logger.info('Configurando filtros: Range=Today, Dept=200...');
-
-  await sleep(2000);
-
-  // Esperar que los filtros estén disponibles
-  await page.waitForSelector(
-    'select, [class*="select"], [class*="dropdown"], mat-select',
-    { timeout: 15000 }
-  ).catch(() => {});
-
-  // Configurar Range = Today
-  await setRangeToday(page);
-
-  // Configurar Department = Dept 200
-  await setDepartment200(page);
-
-  // Click en Search/Apply
-  await clickSearch(page);
-
-  // Esperar resultados
-  await sleep(3000);
-  await waitForLoad(page, 20000).catch(() => {});
-
-  logger.info('Filtros aplicados.');
-}
-
-/**
- * Selecciona "Today" en el dropdown de Range
- */
-async function setRangeToday(page) {
-  try {
-    await page.evaluate(() => {
-      // Buscar el select/dropdown de Range
-      const allSelects = document.querySelectorAll('select');
-      for (const sel of allSelects) {
-        const options = Array.from(sel.options || []);
-        const todayOpt = options.find(o =>
-          o.text.toLowerCase().includes('today') ||
-          o.value.toLowerCase().includes('today')
-        );
-        if (todayOpt) {
-          sel.value = todayOpt.value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          return;
-        }
-      }
-
-      // Para frameworks como Angular Material / ng-select
-      const dropdowns = document.querySelectorAll('[class*="select"], mat-select, ng-select');
-      for (const dd of dropdowns) {
-        if (dd.textContent?.toLowerCase().includes('range') ||
-            dd.getAttribute('placeholder')?.toLowerCase().includes('range')) {
-          dd.click();
-          setTimeout(() => {
-            const options = document.querySelectorAll('mat-option, .ng-option, option');
-            const today = Array.from(options).find(o =>
-              o.textContent?.toLowerCase().trim() === 'today'
-            );
-            if (today) today.click();
-          }, 500);
-          break;
-        }
-      }
-    });
-
-    await sleep(1000);
-    logger.info('Range configurado: Today');
-  } catch (err) {
-    logger.warn(`No se pudo configurar Range: ${err.message}`);
-  }
-}
-
-/**
- * Selecciona Dept 200 - Sales Coordinators
- */
-async function setDepartment200(page) {
-  try {
-    await page.evaluate((deptTarget) => {
-      // Limpiar departamento actual y seleccionar Dept 200
-      const deptInputs = document.querySelectorAll(
-        '[class*="department"], [placeholder*="epartment"], [class*="dept"]'
-      );
-
-      for (const input of deptInputs) {
-        input.click();
-        break;
-      }
-
-      // Esperar un momento y buscar en el dropdown abierto
-      setTimeout(() => {
-        // Cerrar/quitar el dept actual (si hay una X para cerrarlo)
-        const clearBtns = document.querySelectorAll(
-          '[class*="clear"], [class*="remove"], [class*="close-tag"]'
-        );
-        clearBtns.forEach(b => b.click());
-
-        // Buscar la opción Dept 200
-        const options = document.querySelectorAll(
-          '[class*="option"], mat-option, li[role="option"]'
-        );
-        const dept200 = Array.from(options).find(o =>
-          o.textContent?.includes(deptTarget)
-        );
-        if (dept200) dept200.click();
-      }, 1000);
-
-    }, DEPT_TARGET);
-
-    await sleep(2000);
-    logger.info('Departamento configurado: Dept 200 - Sales Coordinators');
-
-  } catch (err) {
-    logger.warn(`No se pudo configurar Department: ${err.message}`);
-  }
-}
-
-/**
- * Click en el botón Search para aplicar filtros
- */
-async function clickSearch(page) {
-  try {
-    await page.evaluate(() => {
-      const buttons = document.querySelectorAll('button');
-      const searchBtn = Array.from(buttons).find(b =>
-        b.textContent?.toLowerCase().trim() === 'search' ||
-        b.textContent?.toLowerCase().includes('apply') ||
-        b.type === 'submit'
-      );
-      if (searchBtn) searchBtn.click();
-    });
-
-    await sleep(1000);
-    logger.info('Search ejecutado.');
-
-  } catch (err) {
-    logger.warn(`No se pudo hacer click en Search: ${err.message}`);
-  }
-}
-
-/**
- * Hace click en "Export CSV" y espera la descarga
- */
-async function exportCSV(page, client, outputFileName, downloadPath) {
-  logger.info('Haciendo click en Export CSV...');
-
-  // Escuchar el evento de descarga
-  const downloadPromise = waitForDownload(client, downloadPath, outputFileName);
-
-  // Click en Export CSV
-  await page.evaluate(() => {
-    const buttons = document.querySelectorAll('button, a');
-    const exportBtn = Array.from(buttons).find(b =>
-      b.textContent?.toLowerCase().includes('export csv') ||
-      b.textContent?.toLowerCase().includes('export') ||
-      b.getAttribute('title')?.toLowerCase().includes('csv')
-    );
     if (exportBtn) {
       exportBtn.click();
-    } else {
-      throw new Error('Botón Export CSV no encontrado');
+      return true;
     }
+    return false;
   });
 
-  // Esperar descarga (máximo 30 segundos)
-  const downloadedPath = await Promise.race([
-    downloadPromise,
-    sleep(30000).then(() => null),
-  ]);
-
-  if (!downloadedPath) {
-    throw new Error('Timeout esperando la descarga del CSV de 3CX.');
+  if (!clicked) {
+    // Log what buttons are visible to help debug
+    const buttonTexts = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button, a[class*="btn"]'))
+        .map(b => b.textContent?.trim())
+        .filter(Boolean)
+        .slice(0, 20)
+    );
+    logger.warn(`Visible buttons: ${buttonTexts.join(' | ')}`);
   }
 
-  // Renombrar archivo al nombre deseado
-  const finalPath = path.join(downloadPath, outputFileName);
-  if (downloadedPath !== finalPath && fs.existsSync(downloadedPath)) {
-    fs.renameSync(downloadedPath, finalPath);
-  }
-
-  return finalPath;
+  return clicked;
 }
 
 /**
- * Espera a que se complete una descarga en el directorio dado
+ * Waits for a new CSV file to appear in the download directory.
  */
-function waitForDownload(client, downloadDir, expectedName) {
+function waitForDownload(client, downloadDir) {
   return new Promise((resolve) => {
-    // Usar el evento de CDP para detectar descarga completada
     client.on('Page.downloadProgress', (event) => {
       if (event.state === 'completed') {
-        // Buscar el archivo más reciente en el directorio
         const files = fs.readdirSync(downloadDir)
           .filter(f => f.endsWith('.csv'))
-          .map(f => ({
-            name: f,
-            time: fs.statSync(path.join(downloadDir, f)).mtime.getTime(),
-          }))
+          .map(f => ({ name: f, time: fs.statSync(path.join(downloadDir, f)).mtime.getTime() }))
           .sort((a, b) => b.time - a.time);
-
         if (files.length > 0) {
           resolve(path.join(downloadDir, files[0].name));
         }

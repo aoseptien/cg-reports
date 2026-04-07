@@ -24,6 +24,7 @@
       <div class="spinner"></div>
       <span>A report is currently running in the background...</span>
       <span class="badge badge-running">Running</span>
+      <button class="btn btn-stop" (click)="stopReport()" title="Force stop">⏹ Stop</button>
     </div>
   }
 
@@ -112,6 +113,42 @@
             <span class="meta-value text-muted">{{ status()?.lastDaily | date:'MMM d, h:mm a' }}</span>
           </div>
         }
+        <div class="meta-row date-picker-row">
+          <span class="meta-label">Report date</span>
+          <div class="date-picker-wrap">
+            <div class="date-presets">
+              <button
+                [class]="'preset-btn' + (dateMode() === 'today' ? ' active' : '')"
+                (click)="setDateMode('today')"
+              >Today</button>
+              <button
+                [class]="'preset-btn' + (dateMode() === 'yesterday' ? ' active' : '')"
+                (click)="setDateMode('yesterday')"
+              >Yesterday</button>
+              <button
+                [class]="'preset-btn' + (dateMode() === 'custom' ? ' active' : '')"
+                (click)="setDateMode('custom')"
+              >Custom</button>
+            </div>
+            @if (dateMode() === 'custom') {
+              <div class="custom-date-row">
+                <span class="calendar-icon">📅</span>
+                <input
+                  type="date"
+                  class="date-input"
+                  [value]="dailyReportDate()"
+                  (change)="dailyReportDate.set($any($event.target).value)"
+                  [max]="getTodayDate()"
+                />
+              </div>
+            } @else {
+              <div class="date-display">
+                <span class="calendar-icon">📅</span>
+                <span class="date-display-text">{{ formatSelectedDate(dailyReportDate()) }}</span>
+              </div>
+            }
+          </div>
+        </div>
       </div>
 
       <button
@@ -163,6 +200,125 @@
           <span>▶ Run Hourly Report</span>
         }
       </button>
+    </div>
+  </div>
+
+  <!-- Attendance Panel -->
+  <div class="card attendance-card">
+    <div class="attendance-header" (click)="toggleAttendancePanel()">
+      <div class="attendance-title">
+        <span class="attendance-icon">👥</span>
+        <div>
+          <h3>Daily Attendance</h3>
+          <p class="text-muted">
+            @if (coordinators().length > 0) {
+              {{ presentCount() }} present
+              @if (leftEarlyCount() > 0) { · {{ leftEarlyCount() }} left early }
+              @if (absentAllDayCount() > 0) { · {{ absentAllDayCount() }} absent }
+            } @else {
+              Mark who didn't come in or left mid-day
+            }
+          </p>
+        </div>
+      </div>
+      <span class="attendance-chevron" [class.open]="attendanceOpen()">▾</span>
+    </div>
+
+    @if (attendanceOpen()) {
+      <div class="attendance-body">
+
+        <!-- Legend -->
+        <div class="attendance-legend">
+          <span class="legend-item present">✅ Present — included in hourly &amp; daily</span>
+          <span class="legend-item left-early">🏃 Left early — excluded from hourly, included in daily</span>
+          <span class="legend-item absent">❌ Absent — excluded from all reports</span>
+        </div>
+
+        @if (attendanceLoading()) {
+          <div class="attendance-loading">Loading coordinators...</div>
+        } @else if (coordinators().length === 0) {
+          <div class="attendance-loading">Could not load coordinators.</div>
+        } @else {
+          <div class="attendance-toolbar">
+            <button class="btn btn-ghost btn-xs" (click)="resetAllPresent()">✅ All present</button>
+          </div>
+
+          <div class="coordinators-grid">
+            @for (name of coordinators(); track name) {
+              <div class="coordinator-item" [ngClass]="getStatus(name)">
+                <span class="coordinator-name">{{ name }}</span>
+                <div class="status-buttons">
+                  <button
+                    class="status-btn"
+                    [class.active]="getStatus(name) === 'present'"
+                    (click)="setStatus(name, 'present')"
+                    title="Present"
+                  >✅</button>
+                  <button
+                    class="status-btn"
+                    [class.active]="getStatus(name) === 'leftEarly'"
+                    (click)="setStatus(name, 'leftEarly')"
+                    title="Left early"
+                  >🏃</button>
+                  <button
+                    class="status-btn"
+                    [class.active]="getStatus(name) === 'absentAllDay'"
+                    (click)="setStatus(name, 'absentAllDay')"
+                    title="Absent all day"
+                  >❌</button>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="attendance-footer">
+            <div class="attendance-summary">
+              <span class="summary-chip present">✅ {{ presentCount() }}</span>
+              <span class="summary-chip left-early">🏃 {{ leftEarlyCount() }}</span>
+              <span class="summary-chip absent">❌ {{ absentAllDayCount() }}</span>
+            </div>
+            <button
+              class="btn btn-primary"
+              (click)="saveAttendance()"
+              [disabled]="attendanceSaving()"
+            >
+              @if (attendanceSaving()) {
+                <span class="spinner"></span> Saving...
+              } @else {
+                💾 Save Attendance
+              }
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Live Log Panel -->
+  <div class="card log-card">
+    <div class="log-header">
+      <span class="log-title">📋 Live Log</span>
+      @if (isRunning()) {
+        <span class="log-live-badge">● LIVE</span>
+      }
+      <button class="btn btn-ghost btn-xs log-copy-btn" (click)="copyLog()" title="Copy all logs">
+        {{ logCopied() ? '✅ Copied!' : '📋 Copy' }}
+      </button>
+      <button class="btn btn-ghost btn-xs log-clear-btn" (click)="clearLog()" [disabled]="logs().length === 0" title="Clear log">
+        {{ logCleared() ? '✅ Cleared!' : '🗑 Clear' }}
+      </button>
+    </div>
+    <div class="log-body" #logBody>
+      @if (logs().length === 0) {
+        <div class="log-empty">No log entries yet. Run a report to see activity here.</div>
+      }
+      @for (entry of logs(); track entry.ts) {
+        <div class="log-line" [ngClass]="logClass(entry.level)">
+          <span class="log-time">{{ formatLogTime(entry.ts) }}</span>
+          <span class="log-level">{{ entry.level }}</span>
+          <span class="log-msg">{{ entry.message }}</span>
+        </div>
+      }
     </div>
   </div>
 

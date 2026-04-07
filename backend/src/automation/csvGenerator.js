@@ -70,7 +70,7 @@ function writeCsv(headers, rows, fileName) {
   ];
 
   fs.writeFileSync(filePath, csvLines.join('\n'), 'utf8');
-  logger.info(`CSV generado: ${filePath} (${rows.length} filas)`);
+  logger.info(`CSV generated: ${filePath} (${rows.length} rows)`);
   return filePath;
 }
 
@@ -104,11 +104,11 @@ function cleanOldOutputFiles(prefix) {
     for (const file of files) {
       if (file.startsWith(prefix) && file.endsWith('.csv')) {
         fs.unlinkSync(path.join(OUTPUT_DIR, file));
-        logger.info(`Output limpiado: ${file}`);
+        logger.info(`Output cleaned: ${file}`);
       }
     }
   } catch (err) {
-    logger.warn(`No se pudo limpiar output: ${err.message}`);
+    logger.warn(`Could not clean output: ${err.message}`);
   }
 }
 
