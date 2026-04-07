@@ -45,7 +45,9 @@ export interface CoordinatorsData {
   leftEarly: string[];      // se fue a mitad → excluida de hourly, aparece en daily
 }
 
-const API = 'http://localhost:3000/api';
+// In dev (ng serve on :4200) the proxy forwards /api → localhost:3000
+// In production (served from node on :3000) /api is on the same origin
+const API = window.location.port === '4200' ? 'http://localhost:3000/api' : '/api';
 
 @Injectable({ providedIn: 'root' })
 export class ReportsService {

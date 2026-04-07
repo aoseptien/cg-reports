@@ -18,6 +18,7 @@
 const path = require('path');
 const fs = require('fs');
 const { getBrowser, newPage } = require('./browserManager');
+const { ensure3CXLogin } = require('./loginChecker');
 const logger = require('../utils/logger');
 
 const THREECX_URL = process.env.THREECX_URL || 'https://3cx.cg-suite.com';
@@ -93,6 +94,9 @@ async function scrape3CX(outputFileName, dateStr) {
   logger.info(`Navigating to: ${reportUrl}`);
 
   const page = await findOrOpen3CXPage(browser);
+
+  // Verify session is active before proceeding
+  await ensure3CXLogin(page, browser);
 
   try {
     // Set download directory

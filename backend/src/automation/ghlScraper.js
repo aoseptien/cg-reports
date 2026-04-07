@@ -12,6 +12,7 @@
  */
 
 const { getBrowser, newPage } = require('./browserManager');
+const { ensureGHLLogin } = require('./loginChecker');
 const logger = require('../utils/logger');
 
 const GHL_URL = process.env.GHL_URL || 'https://app.gohighlevel.com';
@@ -55,6 +56,13 @@ async function scrapeGHL(reportType, coordinators, reportDate) {
   logger.info(`GHL Scraper iniciado — tipo: ${reportType}, fecha: ${reportDate || 'hoy'}`);
 
   try {
+    // 0. Verificar sesión activa
+    const pages = await browser.pages();
+    const anyGHLPage = pages.find(p => p.url().includes('gohighlevel.com') || p.url().includes('highlevel'));
+    if (anyGHLPage) {
+      await ensureGHLLogin(anyGHLPage, browser);
+    }
+
     // 1. Buscar las 3 pestañas CG CRM ya abiertas o navegarlas
     const tabs = await findOrOpenCGCRMTabs(browser);
 

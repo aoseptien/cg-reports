@@ -41,7 +41,11 @@
       "Bash(powershell -Command \"Stop-Process -Id 54976 -Force\")",
       "Bash(curl -s -X POST http://localhost:3000/api/history/delete -H \"Content-Type: application/json\" -d '{\"ids\":[]}')",
       "Bash(curl -s -X POST http://localhost:3000/api/history/delete -H \"Content-Type: application/json\" -d '{\"ids\":[\"test_123\"]}')",
-      "Bash(powershell -Command \"Stop-Process -Id 46900 -Force\")"
+      "Bash(powershell -Command \"Stop-Process -Id 46900 -Force\")",
+      "Bash(powershell -Command \"Stop-Process -Id 39548 -Force\")",
+      "Bash(node --check \"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\src\\\\automation\\\\loginChecker.js\")",
+      "Bash(node --check \"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\src\\\\automation\\\\ghlScraper.js\")",
+      "Bash(node --check \"d:\\\\Work\\\\Reports\\\\Web Reports\\\\cg-reports\\\\backend\\\\src\\\\automation\\\\threecxScraper.js\")"
     ]
   }
 }
