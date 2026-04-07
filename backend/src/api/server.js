@@ -20,6 +20,29 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Middleware ────────────────────────────────────────────────────────
+
+// Permite que GitHub Pages (HTTPS) acceda a localhost (Private Network Access)
+// Chrome envía un preflight OPTIONS con Access-Control-Request-Private-Network: true
+// El servidor DEBE responder con Access-Control-Allow-Private-Network: true
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = ['http://localhost:4200', 'https://aoseptien.github.io'];
+
+  if (origin && allowed.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+
+  // Responder inmediatamente a preflights
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(cors({
   origin: [
     'http://localhost:4200',         // Angular dev
@@ -70,7 +93,7 @@ app.get('/api/status', (req, res) => {
     online: true,
     googleAuth: isAuthenticated(),
     scheduler: getSchedulerStatus(),
-    running: getRunning(),
+    running: getRunning().length > 0,
     lastDaily: getLastByType('daily'),
     lastHourly: getLastByType('hourly'),
     timestamp: new Date().toISOString(),
@@ -146,6 +169,19 @@ app.put('/api/scheduler', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Servir Angular frontend (debe ir DESPUÉS de todas las rutas /api)
+// ─────────────────────────────────────────────────────────────────────
+
+const FRONTEND_DIST = path.join(__dirname, '../../../frontend/dist/frontend/browser');
+
+app.use(express.static(FRONTEND_DIST));
+
+// Catch-all: cualquier ruta desconocida → Angular se encarga del routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
 });
 
 // ─────────────────────────────────────────────────────────────────────

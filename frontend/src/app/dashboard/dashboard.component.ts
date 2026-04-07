@@ -115,6 +115,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   formatDate(dateStr: string | null): string {
     if (!dateStr) return 'Never';
     const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Never';
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffMins = Math.floor(diffMs / 60000);

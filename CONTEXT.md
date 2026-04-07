@@ -229,33 +229,59 @@ TZ=America/New_York
 - [x] Google Drive uploader
 - [x] Google OAuth2 auth
 - [x] Apps Script trigger
-- [x] Scheduler con días configurables
-- [x] API REST Express
+- [x] Scheduler con días configurables (Daily 9AM, Hourly 1-5PM)
+- [x] API REST Express en localhost:3000
 - [x] Angular Dashboard (Dashboard, Schedule, History)
 - [x] Windows Service installer
 - [x] GitHub Actions workflow para deploy automático a GitHub Pages
 - [x] baseHref `/cg-reports/` configurado en angular.json (production)
 - [x] SPA routing fix para GitHub Pages (404.html + script en index.html)
-- [x] GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET ya completados en .env
+- [x] GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET completados en .env
 - [x] SHEETS_DAILY_ID, SHEETS_HOURLY_ID, APPS_SCRIPT_DAILY_ID, APPS_SCRIPT_HOURLY_ID completados en .env
-- [x] Google OAuth2 ya autorizado — tokens guardados en backend/sessions/google_tokens.json
-- [x] node_modules del backend instalados
-- [ ] Login de Puppeteer en GHL y 3CX (correr `npm run setup-session` desde backend/)
-- [ ] Activar GitHub Pages en Settings → Pages → Source: GitHub Actions
-- [ ] Push del código a GitHub (activa el deploy automático)
-- [ ] Prueba end-to-end en PC real
+- [x] Google OAuth2 autorizado — tokens en backend/sessions/google_tokens.json
+- [x] node_modules del backend instalados (npm install completado)
+- [x] Login de Puppeteer en GHL y 3CX — sesión guardada en backend/sessions/
+- [x] Repo hecho público en GitHub (requerido para GitHub Pages gratis)
+- [x] GitHub Pages activado — Source: GitHub Actions
+- [x] Angular desplegado en https://aoseptien.github.io/cg-reports ✅ LIVE
+- [x] Backend corriendo en localhost:3000
+- [x] Header Access-Control-Allow-Private-Network agregado a server.js (fix Chrome HTTPS→localhost)
+- [ ] **Reiniciar backend** para que el header de Private Network Access surta efecto
+- [ ] Verificar que el dashboard muestre Backend Online (después del reinicio)
+- [ ] Publicar Apps Script como API Executable (ver SETUP.md PASO 8)
+- [ ] Prueba end-to-end: correr Daily o Hourly manualmente desde el dashboard
+- [ ] Instalar como Windows Service (install-service.bat como Administrador)
 
 ---
 
-## 📌 Pendientes / Notas
+## 📌 Próximos pasos (en orden)
 
-1. **Próximo paso inmediato:** correr `npm run setup-session` en `backend/` — se abre Chrome con ventana, hacer login en GHL y 3CX con Google SSO, luego Enter en la terminal
-2. **Publicar Apps Script como API Executable** para que el trigger funcione (ver SETUP.md PASO 8)
-3. **GitHub Pages:** activar en repo Settings → Pages → Source: **"GitHub Actions"** (no branch)
-4. **Push del código:** `git add . && git commit -m "Ready for production" && git push` — esto activa el deploy automático del frontend
-5. **El .env correcto está en `backend/.env`** — el servidor lo lee desde ahí (no desde backend/src/)
-6. **Timezone:** `TZ=America/New_York` — verificar si es correcto para la ubicación
+1. **INMEDIATO:** Reiniciar backend → Ctrl+C en la terminal y `node src/api/server.js`
+2. **Verificar dashboard:** abrir https://aoseptien.github.io/cg-reports — debe mostrar Backend Online ✅
+3. **Publicar Apps Script:** en script editor → Deploy → New deployment → API Executable
+4. **Test end-to-end:** click "Run Daily Report" en dashboard y verificar que llena el Sheet
+5. **Windows Service:** correr `install-service.bat` como Administrador para que inicie automáticamente
 
 ---
 
-*Última actualización: Abril 2026*
+## 🐛 Problemas resueltos
+
+- **"Access blocked: Missing required parameter: client_id"** → .env no estaba guardado. Fix: Ctrl+S
+- **GitHub Pages requería repo público** → cambiado de privado a público
+- **Deploy fallaba (404)** → GitHub Pages no estaba activado cuando corrió el primer workflow
+- **Dashboard mostraba Offline** → Chrome bloquea HTTPS→HTTP (Private Network Access). Fix: header `Access-Control-Allow-Private-Network: true` en server.js
+
+---
+
+## 🔗 URLs importantes
+
+- **Dashboard:** https://aoseptien.github.io/cg-reports
+- **Backend health:** http://localhost:3000/health
+- **Backend auth Google:** http://localhost:3000/auth/google
+- **GitHub repo:** https://github.com/aoseptien/cg-reports
+- **Google Sheet Daily:** https://docs.google.com/spreadsheets/d/1o76IEG2D6GX6uS3Bk-cU_HsBfWzPJjNFArMODbJ9GWk
+- **Google Sheet Hourly:** https://docs.google.com/spreadsheets/d/1hSj367KM857Rx4-9CLkMa5Sdj1fo8GQltJzpNyoZrdQ
+
+---
+
+*Última actualización: 06 Abril 2026 — Dashboard live, backend corriendo, pendiente test end-to-end*

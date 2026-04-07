@@ -4,7 +4,20 @@
       "Bash(npx @angular/cli@latest new frontend --routing=true --style=scss --skip-git --skip-install)",
       "Bash(npm install:*)",
       "Bash(grep -r provideBrowserGlobalErrorListeners '/d/Work/Reports/Web Reports/frontend/node_modules/@angular/core/' --include=*.d.ts -l)",
-      "Bash(grep -r withFetch '/d/Work/Reports/Web Reports/frontend/node_modules/@angular/common/' --include=*.d.ts -l)"
+      "Bash(grep -r withFetch '/d/Work/Reports/Web Reports/frontend/node_modules/@angular/common/' --include=*.d.ts -l)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d[''''projects''''][''''frontend''''][''''architect''''][''''build''''][''''options''''], indent=2\\)\\)\")",
+      "Bash(npm run:*)",
+      "Bash(python -c \":*)",
+      "Bash(xargs grep:*)",
+      "Bash(find 'D:\\\\Work\\\\Reports\\\\Web Reports\\\\frontend\\\\src' -name *.service.ts -exec cat {})",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(Start-Sleep 1)",
+      "Bash(Start-Process -NoNewWindow -FilePath \"node\" -ArgumentList \"src/api/server.js\")",
+      "Bash(node src/api/server.js)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s -X PUT http://localhost:3000/api/scheduler -H \"Content-Type: application/json\" -d \"{\\\\\"enabled\\\\\": false}\")",
+      "Bash(curl -s http://localhost:3000/api/status)",
+      "Bash(start /B node src/api/server.js)"
     ]
   }
 }
