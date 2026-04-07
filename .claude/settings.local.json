@@ -17,7 +17,8 @@
       "Bash(curl -s http://localhost:3000/health)",
       "Bash(curl -s -X PUT http://localhost:3000/api/scheduler -H \"Content-Type: application/json\" -d \"{\\\\\"enabled\\\\\": false}\")",
       "Bash(curl -s http://localhost:3000/api/status)",
-      "Bash(start /B node src/api/server.js)"
+      "Bash(start /B node src/api/server.js)",
+      "Bash([ -d \"d:/Work/Reports/Web Reports/cg-reports/frontend/node_modules\" ])"
     ]
   }
 }
